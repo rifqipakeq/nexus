@@ -1,0 +1,81 @@
+name: nexus_node_lite
+description: "NexusNode Lite – Web3 Testnet Portfolio App"
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  flutter_riverpod: ^2.6.1
+
+  # Navigation
+  go_router: ^14.8.1
+
+  # Networking
+  dio: ^5.7.0
+
+  # Local Database
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+
+  # Secure Storage
+  flutter_secure_storage: ^9.2.4
+
+  # Encryption
+  encrypt: ^5.0.3
+
+  # Biometric Auth
+  local_auth: ^2.3.0
+
+  # Blockchain
+  web3dart: ^2.7.3
+  http: ^1.3.0
+
+  # Firebase
+  firebase_core: ^3.12.1
+  firebase_auth: ^5.5.1
+  firebase_messaging: ^15.2.4
+
+  # Notifications
+  flutter_local_notifications: ^18.0.1
+
+  # Sensors
+  geolocator: ^13.0.2
+  sensors_plus: ^6.1.1
+
+  # QR Scanner
+  mobile_scanner: ^6.0.5
+
+  # Env
+  flutter_dotenv: ^5.2.1
+
+  # Utils
+  cupertino_icons: ^1.0.8
+  intl: ^0.19.0
+  uuid: ^4.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  hive_generator: ^2.0.1
+  build_runner: ^2.4.13
+
+flutter:
+  uses-material-design: true
+  assets:
+    - .env
+  #         style: italic
+  #   - family: Trajan Pro
+  #     fonts:
+  #       - asset: fonts/TrajanPro.ttf
+  #       - asset: fonts/TrajanPro_Bold.ttf
+  #         weight: 700
+  #
+  # For details regarding fonts from package dependencies,
+  # see https://flutter.dev/to/font-from-package
