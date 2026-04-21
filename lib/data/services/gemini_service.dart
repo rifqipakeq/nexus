@@ -12,7 +12,7 @@ class GeminiService {
     }
 
     _model = GenerativeModel(
-      model: 'gemini-2.5-flash-lite', // or gemini-1.5-pro
+      model: 'gemini-2.5-flash-lite', 
       apiKey: apiKey,
     );
   }

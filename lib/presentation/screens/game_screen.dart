@@ -1,10 +1,9 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers.dart';
 
-/// Price Guess Game – Simple implementation without Flame engine.
-/// Shows ETH price, user guesses up or down, random simulated result.
 class GameScreen extends ConsumerStatefulWidget {
   const GameScreen({super.key});
 
@@ -12,38 +11,83 @@ class GameScreen extends ConsumerStatefulWidget {
   ConsumerState<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends ConsumerState<GameScreen>
-    with SingleTickerProviderStateMixin {
-  String? _result;
-  bool _isRevealing = false;
-  double _simulatedChange = 0;
+class _GameScreenState extends ConsumerState<GameScreen> {
+  final Random _random = Random();
 
-  Future<void> _makeGuess(String direction) async {
+  double _circleX = 100;
+  double _circleY = 100;
+  bool _isCircleVisible = false;
+
+  DateTime? _spawnTime;
+  int _difficultyMs = 1500;
+
+  Timer? _roundTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startGame();
+  }
+
+  @override
+  void dispose() {
+    _roundTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startGame() {
+    _scheduleNextRound();
+  }
+
+  void _scheduleNextRound() {
+    _roundTimer?.cancel();
+
+    _roundTimer = Timer(Duration(milliseconds: _difficultyMs), () {
+      _spawnCircle();
+    });
+  }
+
+  // fungsi spawn lingkaran acak
+  void _spawnCircle() {
+    final size = MediaQuery.of(context).size;
+
     setState(() {
-      _isRevealing = true;
-      _result = null;
+      _circleX = _random.nextDouble() * (size.width - 80);
+      _circleY = _random.nextDouble() * (size.height - 200);
+      _isCircleVisible = true;
+      _spawnTime = DateTime.now();
     });
 
-    // Simulate a 2-second "price movement"
-    await Future.delayed(const Duration(seconds: 2));
+    // Penalti jika user tidak menekan
+    _roundTimer = Timer(Duration(milliseconds: _difficultyMs), () {
+      if (_isCircleVisible) {
+        setState(() {
+          _isCircleVisible = false;
+        });
+        _scheduleNextRound();
+      }
+    });
+  }
 
-    // Random result: price goes up or down
-    final random = Random();
-    _simulatedChange = (random.nextDouble() * 200 - 100); // -100 to +100
-    final actualDirection = _simulatedChange >= 0 ? 'up' : 'down';
-    final won = direction == actualDirection;
+  // fungsi saat lingkaran ditekan
+  Future<void> _onTapCircle() async {
+    if (_spawnTime == null) return;
 
-    final db = ref.read(localDbProvider);
+    final reactionTime = DateTime.now().difference(_spawnTime!).inMilliseconds;
+
     int score = ref.read(gameScoreProvider);
     int totalGames = ref.read(totalGamesProvider);
 
-    if (won) {
-      score += 10;
-    } else {
-      score = (score - 5).clamp(0, 999999);
-    }
+    // logic scoring: semakin cepat, semakin banyak poin (maks 1000ms = 100 poin, min 10 poin)
+    final gained = (1000 - reactionTime).clamp(10, 100);
+    score += gained;
     totalGames++;
 
+    // setiap 5 poin, tingkat kesulitan naik
+    _difficultyMs = (_difficultyMs * 0.9).clamp(400, 2000).toInt();
+
+    // simpan data game
+    final db = ref.read(localDbProvider);
     await db.saveGameScore(score);
     await db.saveHighScore(score);
     await db.saveTotalGames(totalGames);
@@ -53,194 +97,81 @@ class _GameScreenState extends ConsumerState<GameScreen>
     ref.read(totalGamesProvider.notifier).state = totalGames;
 
     setState(() {
-      _result = won ? '🎉 Correct!' : '❌ Wrong!';
-      _isRevealing = false;
+      _isCircleVisible = false;
     });
+
+    _scheduleNextRound();
   }
 
   @override
   Widget build(BuildContext context) {
-    final prices = ref.watch(ethPriceProvider);
     final score = ref.watch(gameScoreProvider);
     final highScore = ref.watch(highScoreProvider);
     final totalGames = ref.watch(totalGamesProvider);
-    final ethUsd = prices['usd'] ?? 0.0;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Price Guess Game')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            // ─── Score Board ────────────────────────
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+      appBar: AppBar(title: const Text('Reaction Game')),
+      body: Column(
+        children: [
+          // Scoreboard
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _ScoreTile(label: 'Score', value: '$score'),
+                _ScoreTile(label: 'Best', value: '$highScore'),
+                _ScoreTile(label: 'Rounds', value: '$totalGames'),
+              ],
+            ),
+          ),
+
+          // Game field
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return Stack(
                   children: [
-                    _ScoreTile(label: 'Score', value: score.toString()),
-                    _ScoreTile(label: 'Best', value: highScore.toString()),
-                    _ScoreTile(label: 'Games', value: totalGames.toString()),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
+                    Container(color: Colors.black),
 
-            // ─── Current Price ──────────────────────
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    const Text(
-                      'Current ETH Price',
-                      style: TextStyle(fontSize: 16, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '\$${ethUsd.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontSize: 36,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    if (_simulatedChange != 0) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'Simulated move: ${_simulatedChange >= 0 ? '+' : ''}${_simulatedChange.toStringAsFixed(2)}',
-                        style: TextStyle(
-                          color: _simulatedChange >= 0
-                              ? Colors.greenAccent
-                              : Colors.redAccent,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // ─── Game Question ──────────────────────
-            const Text(
-              'Will ETH price go UP or DOWN?',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 20),
-
-            if (_isRevealing) ...[
-              const SizedBox(
-                height: 60,
-                child: Center(
-                  child: Column(
-                    children: [
-                      CircularProgressIndicator(),
-                      SizedBox(height: 8),
-                      Text('Simulating price...'),
-                    ],
-                  ),
-                ),
-              ),
-            ] else ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 80,
-                      child: ElevatedButton(
-                        onPressed: () => _makeGuess('up'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green[700],
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                    if (_isCircleVisible)
+                      Positioned(
+                        left: _circleX.clamp(0, constraints.maxWidth - 80),
+                        top: _circleY.clamp(0, constraints.maxHeight - 80),
+                        child: GestureDetector(
+                          onTap: _onTapCircle,
+                          child: Container(
+                            width: 80,
+                            height: 80,
+                            decoration: const BoxDecoration(
+                              color: Colors.redAccent,
+                              shape: BoxShape.circle,
+                            ),
                           ),
                         ),
-                        child: const Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.arrow_upward, size: 32),
-                            Text('UP', style: TextStyle(fontSize: 18)),
-                          ],
-                        ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: SizedBox(
-                      height: 80,
-                      child: ElevatedButton(
-                        onPressed: () => _makeGuess('down'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red[700],
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: const Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.arrow_downward, size: 32),
-                            Text('DOWN', style: TextStyle(fontSize: 18)),
-                          ],
-                        ),
+
+                    // Indikator kecepatan
+                    Positioned(
+                      bottom: 20,
+                      left: 20,
+                      child: Text(
+                        'Speed: ${_difficultyMs}ms',
+                        style: const TextStyle(color: Colors.white70),
                       ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-
-            const SizedBox(height: 24),
-
-            // ─── Result ─────────────────────────────
-            if (_result != null)
-              Text(
-                _result!,
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: _result!.contains('Correct')
-                      ? Colors.greenAccent
-                      : Colors.redAccent,
-                ),
-              ),
-
-            const SizedBox(height: 24),
-
-            // ─── Rules ──────────────────────────────
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'How to Play',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '• Guess if ETH price will go up or down\n'
-                      '• Correct guess: +10 points\n'
-                      '• Wrong guess: -5 points\n'
-                      '• Price movement is simulated randomly',
-                      style: TextStyle(color: Colors.grey[400], fontSize: 13),
                     ),
                   ],
-                ),
-              ),
+                );
+              },
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
+// Widget  score, best score, dan total games
 class _ScoreTile extends StatelessWidget {
   final String label;
   final String value;
@@ -254,11 +185,12 @@ class _ScoreTile extends StatelessWidget {
         Text(
           value,
           style: const TextStyle(
-            fontSize: 24,
+            fontSize: 22,
             fontWeight: FontWeight.bold,
             color: Color(0xFF6C63FF),
           ),
         ),
+        const SizedBox(height: 4),
         Text(label, style: TextStyle(color: Colors.grey[400], fontSize: 12)),
       ],
     );
