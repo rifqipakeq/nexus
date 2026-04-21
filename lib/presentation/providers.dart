@@ -37,7 +37,7 @@ final motionServiceProvider = Provider<MotionService>((ref) {
 });
 
 final geminiServiceProvider = Provider<GeminiService>((ref) {
-  return GeminiService(ref.read(apiServiceProvider));
+  return GeminiService();
 });
 
 final priceServiceProvider = Provider<PriceService>((ref) {
