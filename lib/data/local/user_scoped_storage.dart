@@ -220,4 +220,27 @@ class UserScopedStorage {
   }
 
   int getTotalGames() => gameBox.get('total_games', defaultValue: 0) as int;
+
+  // ─── Transaction History (User-Scoped) ──────────────────────────
+
+  /// Add a transaction record to the user's history.
+  Future<void> addTransaction(Map<String, String> tx) async {
+    final history = getTransactionHistory();
+    // Insert at the beginning so newest transactions appear first.
+    history.insert(0, tx);
+    await walletBox.put('tx_history', history);
+  }
+
+  /// Get all transaction records for the current user, newest first.
+  List<Map<String, String>> getTransactionHistory() {
+    final raw = walletBox.get('tx_history', defaultValue: <dynamic>[]);
+    return (raw as List)
+        .map((e) => Map<String, String>.from(e as Map))
+        .toList();
+  }
+
+  /// Clear all transaction history for the current user.
+  Future<void> clearTransactionHistory() async {
+    await walletBox.put('tx_history', <dynamic>[]);
+  }
 }

@@ -53,6 +53,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       // Set current user in provider
       ref.read(currentUserProvider.notifier).state = result.user;
 
+      // Open user-scoped storage for the new user
+      final storage = ref.read(userScopedStorageProvider);
+      await storage.openForUser(result.user!.id);
+
+      // Set active user in blockchain service
+      final blockchain = ref.read(blockchainServiceProvider);
+      blockchain.setActiveUser(result.user!.id);
+
       if (mounted) {
         // Show success and navigate to dashboard
         ScaffoldMessenger.of(context).showSnackBar(

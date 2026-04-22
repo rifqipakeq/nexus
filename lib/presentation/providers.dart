@@ -115,3 +115,8 @@ final gameScoreProvider = StateProvider<int>((ref) => 0);
 final highScoreProvider = StateProvider<int>((ref) => 0);
 
 final totalGamesProvider = StateProvider<int>((ref) => 0);
+
+// ─── Transaction History State ──────────────────────────────────
+
+final transactionHistoryProvider =
+    StateProvider<List<Map<String, String>>>((ref) => []);

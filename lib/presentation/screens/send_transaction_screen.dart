@@ -72,6 +72,19 @@ class _SendTransactionScreenState extends ConsumerState<SendTransactionScreen> {
         await storage.saveLastNotifiedBalance(newBalance);
       }
 
+      // Record the sent transaction in history
+      await storage.addTransaction({
+        'type': 'sent',
+        'from': walletAddress ?? '',
+        'to': address,
+        'value': '${amount.toStringAsFixed(6)} ETH',
+        'status': 'confirmed',
+        'date': DateTime.now().toIso8601String(),
+        'hash': txHash,
+      });
+      ref.read(transactionHistoryProvider.notifier).state =
+          storage.getTransactionHistory();
+
       setState(() => _result = 'Success! TX: $txHash');
     } catch (e) {
       setState(() => _result = 'Error: $e');

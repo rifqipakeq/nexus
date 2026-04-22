@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../providers.dart';
 
-/// Transaction history screen (mocked data).
+/// Transaction history screen — reads from user-scoped storage.
+///
+/// Transactions are recorded when:
+/// - User sends ETH (from send_transaction_screen.dart)
+/// - Incoming ETH is detected via balance polling (from dashboard_screen.dart)
 class HistoryScreen extends ConsumerWidget {
   const HistoryScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final address = ref.watch(walletAddressProvider);
+    final history = ref.watch(transactionHistoryProvider);
 
     if (address == null) {
       return Scaffold(
@@ -17,17 +23,47 @@ class HistoryScreen extends ConsumerWidget {
       );
     }
 
-    final blockchain = ref.read(blockchainServiceProvider);
-    final history = blockchain.getMockTransactionHistory(address);
+    if (history.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Transaction History')),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.receipt_long, size: 64, color: Colors.grey[700]),
+              const SizedBox(height: 16),
+              Text(
+                'No transactions yet',
+                style: TextStyle(color: Colors.grey[500], fontSize: 16),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Send or receive ETH to see your history.',
+                style: TextStyle(color: Colors.grey[600], fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Transaction History')),
+      appBar: AppBar(
+        title: const Text('Transaction History'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () => _clearHistory(context, ref),
+            tooltip: 'Clear history',
+          ),
+        ],
+      ),
       body: ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: history.length,
         itemBuilder: (context, index) {
           final tx = history[index];
-          final isSent = tx['from'] == address;
+          final isSent = tx['type'] == 'sent';
 
           return Card(
             margin: const EdgeInsets.only(bottom: 12),
@@ -48,15 +84,29 @@ class HistoryScreen extends ConsumerWidget {
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(tx['value']!, style: const TextStyle(fontSize: 16)),
                   Text(
-                    '${tx['date']} • ${tx['status']}',
+                    tx['value'] ?? '0 ETH',
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  if (isSent && tx['to'] != null)
+                    Text(
+                      'To: ${_shortAddress(tx['to']!)}',
+                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                    ),
+                  if (!isSent && tx['from'] != null)
+                    Text(
+                      'From: ${tx['from'] == 'External' ? 'External' : _shortAddress(tx['from']!)}',
+                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                    ),
+                  Text(
+                    '${_formatDate(tx['date'])} • ${tx['status'] ?? 'unknown'}',
                     style: TextStyle(color: Colors.grey[500], fontSize: 12),
                   ),
-                  Text(
-                    'TX: ${tx['hash']}',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 11),
-                  ),
+                  if (tx['hash'] != null)
+                    Text(
+                      'TX: ${_shortHash(tx['hash']!)}',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                    ),
                 ],
               ),
               isThreeLine: true,
@@ -65,5 +115,58 @@ class HistoryScreen extends ConsumerWidget {
         },
       ),
     );
+  }
+
+  Future<void> _clearHistory(BuildContext context, WidgetRef ref) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear History?'),
+        content: const Text('This will remove all transaction records.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'Clear',
+              style: TextStyle(color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      final storage = ref.read(userScopedStorageProvider);
+      await storage.clearTransactionHistory();
+      ref.read(transactionHistoryProvider.notifier).state = [];
+    }
+  }
+
+  String _shortAddress(String addr) {
+    if (addr.length > 10) {
+      return '${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}';
+    }
+    return addr;
+  }
+
+  String _shortHash(String hash) {
+    if (hash.length > 16) {
+      return '${hash.substring(0, 10)}...${hash.substring(hash.length - 4)}';
+    }
+    return hash;
+  }
+
+  String _formatDate(String? isoDate) {
+    if (isoDate == null) return '';
+    try {
+      final dt = DateTime.parse(isoDate);
+      return DateFormat('MMM d, yyyy  HH:mm').format(dt);
+    } catch (_) {
+      return isoDate;
+    }
   }
 }

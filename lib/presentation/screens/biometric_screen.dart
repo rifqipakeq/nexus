@@ -131,6 +131,8 @@ class _BiometricScreenState extends ConsumerState<BiometricScreen> {
     ref.read(highScoreProvider.notifier).state = storage.getHighScore();
     ref.read(totalGamesProvider.notifier).state = storage.getTotalGames();
     ref.read(ethPriceProvider.notifier).state = storage.getCachedPrices();
+    ref.read(transactionHistoryProvider.notifier).state =
+        storage.getTransactionHistory();
   }
 
   @override

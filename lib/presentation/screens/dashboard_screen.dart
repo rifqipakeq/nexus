@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/constants.dart';
 import '../providers.dart';
+import 'package:intl/intl.dart';
 
 /// Main dashboard showing wallet info, prices, and navigation to features.
 ///
@@ -21,6 +24,8 @@ class DashboardScreen extends ConsumerStatefulWidget {
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   bool _isLoading = false;
+  bool _isUsd = false; // default IDR
+
   Timer? _balancePollTimer;
 
   @override
@@ -57,6 +62,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           lastNotifiedBalance: lastNotified,
         );
         if (notified) {
+          // Record the received transaction in history
+          final received = balance - lastNotified;
+          await storage.addTransaction({
+            'type': 'received',
+            'from': 'External',
+            'to': address,
+            'value': '${received.toStringAsFixed(6)} ETH',
+            'status': 'confirmed',
+            'date': DateTime.now().toIso8601String(),
+            'hash': 'poll_${DateTime.now().millisecondsSinceEpoch}',
+          });
+          ref.read(transactionHistoryProvider.notifier).state = storage
+              .getTransactionHistory();
           await storage.saveLastNotifiedBalance(balance);
         }
 
@@ -81,8 +99,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final motionService = ref.read(motionServiceProvider);
     motionService.startListening(
       onShake: () {
-        ref.read(balanceVisibleProvider.notifier).state =
-            !ref.read(balanceVisibleProvider);
+        ref.read(balanceVisibleProvider.notifier).state = !ref.read(
+          balanceVisibleProvider,
+        );
       },
     );
   }
@@ -118,18 +137,50 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               'Address:',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
-            SelectableText(
-              wallet['address']!,
-              style: const TextStyle(fontSize: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: SelectableText(
+                    wallet['address']!,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.copy, size: 18),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: wallet['address']!));
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(content: Text('Address copied!')),
+                    );
+                  },
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             const Text(
               'Private Key:',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
-            SelectableText(
-              wallet['privateKey']!,
-              style: const TextStyle(fontSize: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: SelectableText(
+                    wallet['privateKey']!,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.copy, size: 18),
+                  onPressed: () {
+                    Clipboard.setData(
+                      ClipboardData(text: wallet['privateKey']!),
+                    );
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(content: Text('Private key copied!')),
+                    );
+                  },
+                ),
+              ],
             ),
           ],
         ),
@@ -139,6 +190,74 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             child: const Text('I Saved It'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showQrCode(String address) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Wallet QR Code'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: QrImageView(
+                data: address,
+                version: QrVersions.auto,
+                size: 200,
+                backgroundColor: Colors.white,
+                eyeStyle: const QrEyeStyle(
+                  eyeShape: QrEyeShape.square,
+                  color: Colors.black,
+                ),
+                dataModuleStyle: const QrDataModuleStyle(
+                  dataModuleShape: QrDataModuleShape.circle,
+                  color: Colors.black,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SelectableText(
+              address,
+              style: const TextStyle(fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: address));
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text('Address copied!')),
+                );
+              },
+              icon: const Icon(Icons.copy, size: 16),
+              label: const Text('Copy Address'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _copyAddress(String address) {
+    Clipboard.setData(ClipboardData(text: address));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Wallet address copied to clipboard!'),
+        duration: Duration(seconds: 2),
       ),
     );
   }
@@ -167,6 +286,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     ref.invalidate(highScoreProvider);
     ref.invalidate(totalGamesProvider);
     ref.invalidate(isInSafeZoneProvider);
+    ref.invalidate(transactionHistoryProvider);
 
     // 5. Navigate to login
     if (mounted) context.go('/login');
@@ -191,6 +311,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final ethUsd = prices['usd'] ?? 0.0;
     final ethIdr = prices['idr'] ?? 0.0;
     final balanceUsd = balance * ethUsd;
+
+    final idrFormatter = NumberFormat('#,##0', 'id_ID');
+    final usdFormatter = NumberFormat('#,##0.00', 'en_US');
 
     return Scaffold(
       appBar: AppBar(
@@ -273,25 +396,56 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          IconButton(
-                            icon: Icon(
-                              balanceVisible
-                                  ? Icons.visibility
-                                  : Icons.visibility_off,
-                            ),
-                            onPressed: () {
-                              ref.read(balanceVisibleProvider.notifier).state =
-                                  !balanceVisible;
-                            },
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (address != null) ...[
+                                // QR Code button
+                                IconButton(
+                                  icon: const Icon(Icons.qr_code, size: 22),
+                                  onPressed: () => _showQrCode(address),
+                                  tooltip: 'Show QR Code',
+                                ),
+                              ],
+                              // Visibility toggle
+                              IconButton(
+                                icon: Icon(
+                                  balanceVisible
+                                      ? Icons.visibility
+                                      : Icons.visibility_off,
+                                ),
+                                onPressed: () {
+                                  ref
+                                          .read(balanceVisibleProvider.notifier)
+                                          .state =
+                                      !balanceVisible;
+                                },
+                              ),
+                            ],
                           ),
                         ],
                       ),
                       if (address != null) ...[
-                        Text(
-                          '${address.substring(0, 6)}...${address.substring(address.length - 4)}',
-                          style: TextStyle(
-                            color: Colors.grey[400],
-                            fontSize: 13,
+                        // Tappable address with copy
+                        GestureDetector(
+                          onTap: () => _copyAddress(address),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '${address.substring(0, 6)}...${address.substring(address.length - 4)}',
+                                style: TextStyle(
+                                  color: Colors.grey[400],
+                                  fontSize: 13,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.copy,
+                                size: 14,
+                                color: Colors.grey[500],
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -347,44 +501,69 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'ETH Price',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      // ─── Header + Toggle ─────────────────────
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'ETH Price',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () {
+                              setState(() {
+                                _isUsd = !_isUsd;
+                              });
+                            },
+                            icon: Icon(
+                              _isUsd
+                                  ? Icons.attach_money
+                                  : Icons.currency_exchange,
+                            ),
+                            tooltip: 'Switch Currency',
+                          ),
+                        ],
                       ),
+
                       const SizedBox(height: 8),
+
                       if (_isLoading)
                         const Center(child: CircularProgressIndicator())
                       else ...[
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text('USD'),
-                            Text(
-                              '\$${ethUsd.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
+                        // ─── USD Row ───────────────────────────
+                        if (_isUsd)
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('USD'),
+                              Text(
+                                '\$${usdFormatter.format(ethUsd)}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text('IDR'),
-                            Text(
-                              'Rp ${ethIdr.toStringAsFixed(0)}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
+                            ],
+                          ),
+
+                        // ─── IDR Row ───────────────────────────
+                        if (!_isUsd)
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('IDR'),
+                              Text(
+                                'Rp ${idrFormatter.format(ethIdr)}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
+                            ],
+                          ),
                       ],
                     ],
                   ),
