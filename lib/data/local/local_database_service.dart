@@ -1,8 +1,18 @@
 import 'package:hive/hive.dart';
-import '../../core/constants.dart';
 
-/// Local database service using Hive.
-/// Stores: cached prices, wallet address, chat history, game score.
+/// Legacy local database service using Hive.
+///
+/// ⚠️ DEPRECATED: This service uses global (non-scoped) Hive boxes.
+/// For multi-account support, use [UserScopedStorage] instead.
+///
+/// This file is retained for reference. It demonstrates the data leakage
+/// bug: all users share the same `wallet`, `chat`, and `game` boxes,
+/// meaning User B sees User A's data after switching accounts.
+///
+/// See [UserScopedStorage] for the replacement that uses per-user boxes:
+///   user_{userId}_wallet
+///   user_{userId}_chat
+///   user_{userId}_game
 class LocalDatabaseService {
   // Singleton
   static final LocalDatabaseService _instance =
@@ -19,10 +29,10 @@ class LocalDatabaseService {
   /// Initialize all Hive boxes.
   Future<void> init() async {
     if (_initialized) return;
-    _pricesBox = await Hive.openBox(AppConstants.hiveBoxPrices);
-    _walletBox = await Hive.openBox(AppConstants.hiveBoxWallet);
-    _chatBox = await Hive.openBox(AppConstants.hiveBoxChat);
-    _gameBox = await Hive.openBox(AppConstants.hiveBoxGame);
+    _pricesBox = await Hive.openBox('prices');
+    _walletBox = await Hive.openBox('wallet');
+    _chatBox = await Hive.openBox('chat');
+    _gameBox = await Hive.openBox('game');
     _initialized = true;
   }
 

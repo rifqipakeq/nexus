@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../presentation/screens/login_screen.dart';
+import '../presentation/screens/register_screen.dart';
 import '../presentation/screens/biometric_screen.dart';
 import '../presentation/screens/dashboard_screen.dart';
 import '../presentation/screens/chat_screen.dart';
@@ -9,6 +10,7 @@ import '../presentation/screens/game_screen.dart';
 import '../presentation/screens/scanner_screen.dart';
 import '../presentation/screens/send_transaction_screen.dart';
 import '../presentation/screens/history_screen.dart';
+import '../presentation/screens/account_switcher_screen.dart';
 
 /// GoRouter configuration with all app routes.
 final routerProvider = Provider<GoRouter>((ref) {
@@ -16,6 +18,10 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/login',
     routes: [
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+      GoRoute(
+        path: '/register',
+        builder: (context, state) => const RegisterScreen(),
+      ),
       GoRoute(
         path: '/biometric',
         builder: (context, state) => const BiometricScreen(),
@@ -37,6 +43,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/history',
         builder: (context, state) => const HistoryScreen(),
+      ),
+      GoRoute(
+        path: '/accounts',
+        builder: (context, state) => const AccountSwitcherScreen(),
       ),
     ],
     errorBuilder: (context, state) =>

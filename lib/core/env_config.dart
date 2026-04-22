@@ -14,9 +14,6 @@ class EnvConfig {
   static String get coingeckoBaseUrl =>
       dotenv.env['COINGECKO_BASE_URL'] ?? 'https://api.coingecko.com/api/v3';
 
-  static String get firebaseApiKey =>
-      dotenv.env['FIREBASE_API_KEY'] ?? '';
-
   static double get safeZoneLat =>
       double.tryParse(dotenv.env['SAFE_ZONE_LAT'] ?? '') ?? 0.0;
 

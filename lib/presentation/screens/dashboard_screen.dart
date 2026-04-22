@@ -1,9 +1,17 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/constants.dart';
 import '../providers.dart';
 
 /// Main dashboard showing wallet info, prices, and navigation to features.
+///
+/// Key changes for multi-account support:
+/// - Uses UserScopedStorage instead of global LocalDatabaseService
+/// - Displays current user info
+/// - Logout clears all user-scoped state
+/// - Balance polling detects incoming ETH for notifications
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
@@ -13,6 +21,7 @@ class DashboardScreen extends ConsumerStatefulWidget {
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   bool _isLoading = false;
+  Timer? _balancePollTimer;
 
   @override
   void initState() {
@@ -20,27 +29,39 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     _loadData();
     _startMotionDetection();
     _checkSafeZone();
+    _startBalancePolling();
   }
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
+      final storage = ref.read(userScopedStorageProvider);
+
       // Fetch ETH price
       final priceService = ref.read(priceServiceProvider);
       final prices = await priceService.getEthPrice();
       ref.read(ethPriceProvider.notifier).state = prices;
-
-      // Cache
-      final db = ref.read(localDbProvider);
-      await db.cachePrices(prices);
+      await storage.cachePrices(prices);
 
       // Fetch balance if wallet exists
       final address = ref.read(walletAddressProvider);
       if (address != null) {
         final blockchain = ref.read(blockchainServiceProvider);
         final balance = await blockchain.getBalance(address);
+
+        // Check for balance changes (incoming ETH detection)
+        final lastNotified = storage.getLastNotifiedBalance();
+        final notifications = ref.read(notificationServiceProvider);
+        final notified = await notifications.checkBalanceChange(
+          currentBalance: balance,
+          lastNotifiedBalance: lastNotified,
+        );
+        if (notified) {
+          await storage.saveLastNotifiedBalance(balance);
+        }
+
         ref.read(walletBalanceProvider.notifier).state = balance;
-        await db.saveBalance(balance);
+        await storage.saveBalance(balance);
       }
     } catch (_) {
       // Use cached data on error (offline support)
@@ -49,14 +70,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
   }
 
+  void _startBalancePolling() {
+    _balancePollTimer = Timer.periodic(
+      AppConstants.balancePollInterval,
+      (_) => _loadData(),
+    );
+  }
+
   void _startMotionDetection() {
     final motionService = ref.read(motionServiceProvider);
     motionService.startListening(
       onShake: () {
-        // Toggle balance visibility on shake
-        ref.read(balanceVisibleProvider.notifier).state = !ref.read(
-          balanceVisibleProvider,
-        );
+        ref.read(balanceVisibleProvider.notifier).state =
+            !ref.read(balanceVisibleProvider);
       },
     );
   }
@@ -70,12 +96,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Future<void> _generateWallet() async {
     final blockchain = ref.read(blockchainServiceProvider);
     final wallet = await blockchain.generateWallet();
-    final db = ref.read(localDbProvider);
-    await db.saveWalletAddress(wallet['address']!);
+    final storage = ref.read(userScopedStorageProvider);
+    await storage.saveWalletAddress(wallet['address']!);
     ref.read(walletAddressProvider.notifier).state = wallet['address'];
 
     if (!mounted) return;
-    // Show private key once
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -118,14 +143,45 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
+  Future<void> _logout() async {
+    // 1. Close user-scoped storage (prevents data leakage)
+    final storage = ref.read(userScopedStorageProvider);
+    await storage.closeUserBoxes();
+
+    // 2. Clear blockchain service active user
+    final blockchain = ref.read(blockchainServiceProvider);
+    blockchain.clearActiveUser();
+
+    // 3. Log out from auth service (clears session in secure storage)
+    final auth = ref.read(authServiceProvider);
+    await auth.logout();
+
+    // 4. Reset ALL user-scoped providers to prevent stale data
+    ref.invalidate(currentUserProvider);
+    ref.invalidate(walletAddressProvider);
+    ref.invalidate(walletBalanceProvider);
+    ref.invalidate(balanceVisibleProvider);
+    ref.invalidate(chatHistoryProvider);
+    ref.invalidate(chatLoadingProvider);
+    ref.invalidate(gameScoreProvider);
+    ref.invalidate(highScoreProvider);
+    ref.invalidate(totalGamesProvider);
+    ref.invalidate(isInSafeZoneProvider);
+
+    // 5. Navigate to login
+    if (mounted) context.go('/login');
+  }
+
   @override
   void dispose() {
+    _balancePollTimer?.cancel();
     ref.read(motionServiceProvider).stopListening();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final currentUser = ref.watch(currentUserProvider);
     final address = ref.watch(walletAddressProvider);
     final balance = ref.watch(walletBalanceProvider);
     final prices = ref.watch(ethPriceProvider);
@@ -140,16 +196,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       appBar: AppBar(
         title: const Text('NexusNode Lite'),
         actions: [
+          // Account switcher
           IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () {},
+            icon: const Icon(Icons.people_outline),
+            onPressed: () => context.push('/accounts'),
+            tooltip: 'Switch Account',
           ),
           IconButton(
             icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await ref.read(firebaseAuthProvider).signOut();
-              if (context.mounted) context.go('/login');
-            },
+            onPressed: _logout,
+            tooltip: 'Logout',
           ),
         ],
       ),
@@ -161,6 +217,45 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ─── User Info ──────────────────────────────
+              if (currentUser != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 16,
+                        backgroundColor: const Color(0xFF6C63FF),
+                        child: Text(
+                          currentUser.username[0].toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Hello, ${currentUser.username}',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      if (currentUser.biometricPublicKey != null)
+                        const Padding(
+                          padding: EdgeInsets.only(left: 4),
+                          child: Icon(
+                            Icons.verified_user,
+                            size: 16,
+                            color: Colors.greenAccent,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+
               // ─── Wallet Card ──────────────────────────
               Card(
                 child: Padding(

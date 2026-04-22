@@ -1,56 +1,196 @@
 # NexusNode Lite – Web3 Testnet Portfolio App
 
-A fully functional Flutter mobile application demonstrating Web3 integration with Ethereum Sepolia testnet, AI chatbot, biometric auth, and more.
+A fully local, multi-account Flutter application for Ethereum Sepolia testnet portfolio management with hardware-backed biometric authentication, AI chatbot, and strict per-user data isolation.
+
+> **v2.0** — Firebase has been completely removed. All authentication, storage, and notifications are handled locally on-device.
 
 ---
 
-## 📁 Project Structure
+## 📁 Architecture Overview
 
 ```
 lib/
 ├── core/
-│   ├── constants.dart          # App-wide constants
-│   ├── env_config.dart         # Environment variable access
-│   ├── theme.dart              # Dark theme configuration
-│   ├── router.dart             # GoRouter navigation config
-│   └── session_manager.dart    # Inactivity timeout widget
+│   ├── constants.dart              # App constants + user-scoped key helpers
+│   ├── env_config.dart             # Environment variable access
+│   ├── theme.dart                  # Dark theme configuration
+│   ├── router.dart                 # GoRouter navigation config
+│   └── session_manager.dart        # Inactivity timeout widget
 ├── data/
+│   ├── models/
+│   │   └── user_account.dart       # User account data model
 │   ├── local/
-│   │   └── local_database_service.dart  # Hive DB operations
+│   │   ├── local_database_service.dart  # (legacy, kept for reference)
+│   │   └── user_scoped_storage.dart     # Per-user Hive box management
 │   └── services/
-│       ├── api_service.dart             # Dio HTTP client + interceptor
-│       ├── security_service.dart        # AES encryption + biometrics + secure storage
+│       ├── auth_service.dart            # Multi-account auth lifecycle
+│       ├── password_service.dart        # PBKDF2-HMAC-SHA256 hashing
+│       ├── biometric_auth_service.dart  # Hardware-backed biometric signatures
+│       ├── security_service.dart        # AES-256 encryption + secure storage
 │       ├── blockchain_service.dart      # Ethereum Sepolia wallet operations
-│       ├── notification_service.dart    # Local + Firebase push notifications
+│       ├── notification_service.dart    # Local-only notifications
+│       ├── api_service.dart             # Dio HTTP client
+│       ├── gemini_service.dart          # Google Gemini AI
+│       ├── price_service.dart           # CoinGecko ETH price API
 │       ├── location_service.dart        # GPS safe zone checking
-│       ├── motion_service.dart          # Shake detection via accelerometer
-│       ├── gemini_service.dart          # Google Gemini AI via HTTP
-│       └── price_service.dart           # CoinGecko ETH price API
+│       └── motion_service.dart          # Shake detection
 ├── presentation/
 │   ├── providers.dart                   # Riverpod providers
 │   └── screens/
-│       ├── login_screen.dart            # Firebase email/password auth
-│       ├── biometric_screen.dart        # Biometric verification gate
-│       ├── dashboard_screen.dart        # Main dashboard with wallet & prices
+│       ├── login_screen.dart            # Local username/password login
+│       ├── register_screen.dart         # Account registration
+│       ├── biometric_screen.dart        # Hardware-backed biometric gate
+│       ├── account_switcher_screen.dart # Multi-account switcher
+│       ├── dashboard_screen.dart        # Main dashboard
 │       ├── chat_screen.dart             # AI chatbot (Gemini)
-│       ├── game_screen.dart             # Price Guess mini game
-│       ├── scanner_screen.dart          # QR code wallet scanner
+│       ├── game_screen.dart             # Reaction mini-game
+│       ├── scanner_screen.dart          # QR code scanner
 │       ├── send_transaction_screen.dart # Send ETH (safe zone gated)
-│       └── history_screen.dart          # Transaction history (mocked)
+│       └── history_screen.dart          # Transaction history
 └── main.dart                            # App entry point
 ```
+
+---
+
+## 🔐 Security Model
+
+### Password Hashing
+- **Algorithm**: PBKDF2-HMAC-SHA256
+- **Iterations**: 100,000 (OWASP 2023 minimum recommendation)
+- **Salt**: 32 bytes, cryptographically random, unique per user
+- **Output**: 256-bit derived key
+- **Storage**: Only the hash and salt are stored; plaintext passwords are never persisted
+- **Verification**: Constant-time byte comparison prevents timing side-channel attacks
+
+### Biometric Authentication
+- **Package**: `biometric_signature` (replaces `local_auth`)
+- **Key type**: Hardware-backed ECDSA P-256
+- **Storage**: Private key in Secure Enclave (iOS) / StrongBox (Android)
+- **Authentication**: Produces a verifiable cryptographic signature, not just a boolean
+- **Per-user keys**: Each account gets a unique key alias (`nexus_user_{userId}`)
+- **Fallback**: Graceful degradation to password-only if biometrics unavailable
+
+### Encryption
+- **Wallet private keys**: AES-256-CBC encrypted, stored in Flutter Secure Storage
+- **Scoped keys**: Each user's encrypted private key is stored under `{userId}_encrypted_private_key`
+- **Key material**: AES key and IV generated with `Random.secure()` and persisted in secure storage
+
+### Anti-Enumeration
+- Login with a nonexistent username still performs a full PBKDF2 hash computation to prevent response-time-based username enumeration attacks
+
+---
+
+## 🔄 Authentication Flow
+
+```
+┌─────────────┐     ┌──────────────────┐     ┌───────────────┐
+│  App Start   │────▶│  Check Session   │────▶│   Biometric   │
+└─────────────┘     │  (Secure Store)  │     │  Verification │
+                    └──────────────────┘     └───────┬───────┘
+                           │ no session              │ success
+                           ▼                         ▼
+                    ┌──────────────┐          ┌─────────────┐
+                    │  Login/      │          │  Dashboard   │
+                    │  Register    │          │  (scoped)    │
+                    └──────┬───────┘          └─────────────┘
+                           │ success                 │
+                           ▼                         │ logout
+                    ┌──────────────┐                 │
+                    │  Set Active  │◀────────────────┘
+                    │  Session     │     ┌────────────────┐
+                    └──────┬───────┘     │ Close user     │
+                           │             │ Hive boxes     │
+                           ▼             │ Invalidate     │
+                    ┌──────────────┐     │ all providers  │
+                    │  Open User   │     │ Clear session  │
+                    │  Scoped      │     └────────────────┘
+                    │  Storage     │
+                    └──────────────┘
+```
+
+### Registration Flow
+1. User enters username + password
+2. System generates 32-byte random salt
+3. Password hashed with PBKDF2-HMAC-SHA256 (100k iterations)
+4. Optionally enrolls biometric keys (hardware ECDSA keypair)
+5. `UserAccount` stored in Hive `accounts` box
+6. Active session set in Flutter Secure Storage
+7. User-scoped Hive boxes opened
+
+### Login Flow
+1. User enters username + password
+2. System looks up user by username (case-insensitive)
+3. Password re-hashed with stored salt
+4. Hashes compared using constant-time comparison
+5. On success: set active session → open user-scoped storage → biometric gate → dashboard
+
+### Session Resume Flow
+1. App checks for `active_user_id` in secure storage
+2. If found, routes to biometric verification screen
+3. Biometric signature verified → dashboard with user data loaded
+
+---
+
+## 🔒 Data Isolation Strategy
+
+### The Problem (v1.0)
+All users shared global Hive boxes (`wallet`, `chat`, `game`). User B would see User A's wallet address, chat history, and game scores after logging in.
+
+### The Solution (v2.0)
+Each user gets uniquely-named Hive boxes:
+
+```
+user_{userId}_wallet    ← wallet address, balance, notification tracking
+user_{userId}_chat      ← AI chat history
+user_{userId}_game      ← game score, high score, total games
+prices                  ← shared (ETH price is the same for everyone)
+```
+
+### Isolation Guarantees
+
+| Event | What Happens |
+|-------|-------------|
+| **Login** | `UserScopedStorage.openForUser(userId)` opens per-user boxes |
+| **Usage** | All reads/writes go through scoped box references |
+| **Logout** | Boxes flushed + closed, references nulled, all providers invalidated |
+| **Switch** | Close old user's boxes → open new user's boxes |
+| **Private key** | Stored as `{userId}_encrypted_private_key` in secure storage |
+
+Accessing a closed box throws a `StateError`, preventing accidental cross-user reads.
+
+---
+
+## 🔔 Notification System (No Firebase)
+
+Since there is no backend server, push notifications are not possible. Instead:
+
+| Trigger | Method | Channel |
+|---------|--------|---------|
+| **ETH Sent** | Immediate on `sendTransaction` success | `nexus_transactions` |
+| **ETH Received** | Balance polling (every 30s) detects increase | `nexus_transactions` |
+| **Price Alert** | Price change detected on refresh | `nexus_price_alerts` |
+| **Inactivity** | Session manager timeout | `nexus_session` |
+
+### Deduplication
+- `lastNotifiedBalance` tracked in user-scoped Hive box
+- Only notifies if balance differs from last notification
+- Balance decrease from sending is already covered by the immediate send notification
+
+### Limitations
+- Notifications only fire while the app process is alive
+- No background polling without Firebase/WorkManager
+- Incoming ETH detection depends on the polling interval (configurable via `AppConstants.balancePollInterval`)
 
 ---
 
 ## 🚀 Setup Instructions
 
 ### Prerequisites
-
-- Flutter SDK (latest stable) installed
-- Android Studio or Xcode for emulator/device
+- Flutter SDK (latest stable)
+- Android Studio or Xcode
 - Git
 
-### Step 1: Clone & Install Dependencies
+### Step 1: Install Dependencies
 
 ```bash
 cd nexus_node_lite
@@ -59,100 +199,30 @@ flutter pub get
 
 ### Step 2: Configure Environment Variables
 
-Edit the `.env` file in the project root with your API keys:
+Edit `.env`:
 
 ```env
 ALCHEMY_TESTNET_RPC=https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY
 GEMINI_API_KEY=YOUR_GEMINI_KEY
 COINGECKO_BASE_URL=https://api.coingecko.com/api/v3
-FIREBASE_API_KEY=YOUR_FIREBASE_API_KEY
 SAFE_ZONE_LAT=-7.801389
 SAFE_ZONE_LNG=110.364444
 SAFE_ZONE_RADIUS=500
 ```
 
----
+### Step 3: Android Configuration
 
-### Step 3: Set Up Alchemy (Sepolia Testnet)
-
-1. Go to [https://www.alchemy.com](https://www.alchemy.com)
-2. Create a free account
-3. Click **"Create App"**
-4. Select:
-   - Chain: **Ethereum**
-   - Network: **Sepolia**
-5. Copy the **HTTPS URL** from the app dashboard
-6. Paste it into `.env` as `ALCHEMY_TESTNET_RPC`
-
-**Get Test ETH:**
-
-- Go to [https://sepoliafaucet.com](https://sepoliafaucet.com)
-- Or use Alchemy's faucet: [https://www.alchemy.com/faucets/ethereum-sepolia](https://www.alchemy.com/faucets/ethereum-sepolia)
-- Enter your wallet address to receive free test ETH
-
----
-
-### Step 4: Set Up Firebase
-
-1. Go to [https://console.firebase.google.com](https://console.firebase.google.com)
-2. Create a new project (disable Google Analytics for simplicity)
-3. **Add Android app:**
-   - Package name: `com.nexusnode.nexus_node_lite`
-   - Download `google-services.json`
-   - Place it in `android/app/google-services.json`
-4. **Add iOS app** (if needed):
-   - Bundle ID: `com.nexusnode.nexusNodeLite`
-   - Download `GoogleService-Info.plist`
-   - Place it in `ios/Runner/GoogleService-Info.plist`
-5. **Enable Authentication:**
-   - Go to **Authentication** → **Sign-in method**
-   - Enable **Email/Password**
-6. **Enable Cloud Messaging:**
-   - Go to **Cloud Messaging** tab
-   - Note: FCM is automatically enabled for Firebase projects
-
-**Android gradle setup:**
-
-In `android/build.gradle`, ensure:
-
-```gradle
-dependencies {
-    classpath 'com.google.gms:google-services:4.4.2'
-}
-```
-
-In `android/app/build.gradle`, add at the bottom:
-
-```gradle
-apply plugin: 'com.google.gms.google-services'
-```
-
----
-
-### Step 5: Set Up Google Gemini API
-
-1. Go to [https://aistudio.google.com/apikey](https://aistudio.google.com/apikey)
-2. Click **"Create API Key"**
-3. Copy the key
-4. Paste it into `.env` as `GEMINI_API_KEY`
-
-> Note: Gemini API has a generous free tier. No credit card required.
-
----
-
-### Step 6: Android-Specific Configuration
-
-**Minimum SDK (android/app/build.gradle):**
+**Minimum SDK** (`android/app/build.gradle`):
 
 ```gradle
 android {
     defaultConfig {
-        minSdk = 23  // Required for biometrics + camera
+        minSdk = 23
     }
 }
 ```
 
-**Permissions (android/app/src/main/AndroidManifest.xml):**
+**Permissions** (`android/app/src/main/AndroidManifest.xml`):
 
 ```xml
 <uses-permission android:name="android.permission.INTERNET" />
@@ -160,23 +230,22 @@ android {
 <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 <uses-permission android:name="android.permission.CAMERA" />
 <uses-permission android:name="android.permission.USE_BIOMETRIC" />
-<uses-permission android:name="android.permission.USE_FINGERPRINT" />
 <uses-permission android:name="android.permission.VIBRATE" />
 ```
 
-**For biometric auth, add to `AndroidManifest.xml` inside `<application>`:**
+**MainActivity** (`android/app/src/main/kotlin/.../MainActivity.kt`):
 
-```xml
-<meta-data
-    android:name="io.flutter.embedding.android.NormalTheme"
-    android:resource="@style/NormalTheme" />
+```kotlin
+import io.flutter.embedding.android.FlutterFragmentActivity
+
+class MainActivity : FlutterFragmentActivity() { }
 ```
 
----
+> ⚠️ `biometric_signature` requires `FlutterFragmentActivity` instead of `FlutterActivity`.
 
-### Step 7: iOS-Specific Configuration (if building for iOS)
+### Step 4: iOS Configuration (optional)
 
-**Info.plist additions:**
+Add to `Info.plist`:
 
 ```xml
 <key>NSCameraUsageDescription</key>
@@ -187,9 +256,7 @@ android {
 <string>Face ID is used for biometric authentication</string>
 ```
 
----
-
-### Step 8: Run the App
+### Step 5: Run
 
 ```bash
 flutter run
@@ -197,73 +264,75 @@ flutter run
 
 ---
 
-## 🔧 Features Overview
+## 🔧 Features
 
-| Feature                | Implementation                                             |
-| ---------------------- | ---------------------------------------------------------- |
-| **Authentication**     | Firebase Email/Password + biometric unlock                 |
-| **Session Management** | Auto-logout after 10 min inactivity                        |
-| **Wallet**             | Generate Ethereum wallet, encrypt private key with AES-256 |
-| **Balance**            | Fetch from Alchemy Sepolia RPC, convert via CoinGecko      |
-| **Send ETH**           | Only enabled inside GPS safe zone                          |
-| **QR Scanner**         | Scan wallet addresses to autofill                          |
-| **AI Chat**            | Google Gemini via HTTP POST, history stored locally        |
-| **Price Game**         | Guess up/down, score tracked in Hive                       |
-| **Shake Detect**       | Toggle balance visibility via accelerometer                |
-| **Notifications**      | Local price alerts + inactivity reminders + FCM setup      |
-| **Offline Support**    | Cached prices/wallet/chat via Hive                         |
-
----
-
-## 🏗️ Architecture
-
-Simplified Clean Architecture:
-
-- **core/** – Constants, config, theme, routing, session management
-- **data/** – Services (API, blockchain, security, etc.) and local storage
-- **presentation/** – UI screens and Riverpod providers
-
-No unnecessary abstraction layers. Code is readable for intermediate Flutter developers.
-
----
-
-## 🔐 Session Management – How It Works
-
-1. `SessionManager` widget wraps the entire app
-2. A `GestureDetector` captures all taps, pans, and scale gestures
-3. Each interaction resets a `Timer` set to 10 minutes
-4. When the timer fires without reset, `onTimeout` callback triggers
-5. The callback navigates to `/login`, effectively logging out the user
-6. The timer restarts fresh on every new login
-
----
-
-## ⚠️ Important Notes
-
-- **TESTNET ONLY** – All blockchain operations use Ethereum Sepolia
-- **No real money** – Test ETH has no monetary value
-- **No backend server** – Everything runs from Flutter
-- **Transaction history is mocked** – In production, use Alchemy/Etherscan API
-- **Safe zone coordinates** – Default is Yogyakarta, Indonesia. Change in `.env`
+| Feature | Implementation |
+|---------|---------------|
+| **Multi-Account Auth** | Local PBKDF2 hashing + biometric signatures |
+| **Account Switching** | Seamless switch with biometric re-verification |
+| **Session Persistence** | Auto-resume via secure storage |
+| **Session Timeout** | Auto-logout after 10 min inactivity |
+| **Data Isolation** | Per-user Hive boxes + scoped secure storage keys |
+| **Wallet** | Generate ETH wallet, AES-256 encrypted private key |
+| **Balance** | Fetch from Alchemy RPC, convert via CoinGecko |
+| **Send ETH** | Only in GPS safe zone, with send notification |
+| **Receive Detection** | Polling-based balance change notification |
+| **QR Scanner** | Scan wallet addresses to autofill |
+| **AI Chat** | Google Gemini, per-user history |
+| **Reaction Game** | Score tracked per-user |
+| **Shake Detect** | Toggle balance visibility |
+| **Offline Support** | Cached prices/wallet/chat via Hive |
 
 ---
 
 ## 📦 Dependencies
 
-| Package                       | Purpose                         |
-| ----------------------------- | ------------------------------- |
-| flutter_riverpod              | State management                |
-| go_router                     | Navigation                      |
-| dio                           | HTTP client with interceptors   |
-| hive / hive_flutter           | Local NoSQL database            |
-| flutter_secure_storage        | Encrypted key-value storage     |
-| encrypt                       | AES-256 encryption              |
-| local_auth                    | Biometric authentication        |
-| web3dart                      | Ethereum blockchain interaction |
-| firebase_core / firebase_auth | Firebase authentication         |
-| firebase_messaging            | Push notifications              |
-| flutter_local_notifications   | Local notifications             |
-| geolocator                    | GPS location                    |
-| sensors_plus                  | Accelerometer (shake detection) |
-| mobile_scanner                | QR code scanning                |
-| flutter_dotenv                | Environment variables           |
+| Package | Purpose |
+|---------|---------|
+| `flutter_riverpod` | State management |
+| `go_router` | Navigation |
+| `dio` | HTTP client |
+| `hive` / `hive_flutter` | Local NoSQL database |
+| `flutter_secure_storage` | Encrypted key-value storage |
+| `encrypt` | AES-256 encryption |
+| `cryptography` | PBKDF2 password hashing |
+| `biometric_signature` | Hardware-backed biometric auth |
+| `web3dart` | Ethereum blockchain interaction |
+| `flutter_local_notifications` | Local notifications |
+| `geolocator` | GPS location |
+| `sensors_plus` | Accelerometer (shake detection) |
+| `mobile_scanner` | QR code scanning |
+| `flutter_dotenv` | Environment variables |
+| `google_generative_ai` | Google Gemini AI |
+| `uuid` | Unique ID generation |
+
+---
+
+## ⚠️ Known Limitations
+
+1. **No push notifications**: Without Firebase/backend, notifications only work while the app is in the foreground or background (process alive). Incoming ETH detection relies on polling.
+
+2. **No server-side signature verification**: The `biometric_signature` package is designed for client-server verification. Since we have no backend, we use signatures for local cryptographic proof of biometric presence, which is still stronger than `local_auth`'s boolean return.
+
+3. **Transaction history is mocked**: In production, use Alchemy Enhanced API or Etherscan API for real transaction history.
+
+4. **PBKDF2 vs Argon2**: We chose PBKDF2 because the `cryptography` package is well-maintained and Argon2 support in pure Dart is limited. PBKDF2 with 100k iterations is OWASP-compliant.
+
+5. **No account deletion UI**: Account deletion is supported in `AuthService.deleteAccount()` but no UI is provided. Can be added to the account switcher screen.
+
+6. **Safe zone coordinates**: Default is Yogyakarta, Indonesia. Change in `.env`.
+
+7. **Testnet only**: All blockchain operations use Ethereum Sepolia. Test ETH has no monetary value.
+
+---
+
+## 🏗️ Trade-offs & Design Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| PBKDF2 over bcrypt | `cryptography` package is actively maintained; no native bcrypt in Dart |
+| Per-user Hive boxes over row-level isolation | Hive doesn't support queries; separate boxes guarantee complete isolation |
+| Polling over WebSocket for balance detection | Simpler, no persistent connection needed, acceptable for testnet |
+| `biometric_signature` over `local_auth` | Cryptographic proof > boolean; prevents API hooking attacks |
+| Global prices box | ETH price is not user-specific; saves duplication |
+| No background isolate for polling | Flutter limitation without Firebase; would require WorkManager integration |

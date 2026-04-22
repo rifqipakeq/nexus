@@ -2,19 +2,19 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:encrypt/encrypt.dart' as encrypt_pkg;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:local_auth/local_auth.dart';
 import '../../core/constants.dart';
 
-/// Handles AES encryption/decryption, biometric auth, and secure storage.
+/// Handles AES-256 encryption/decryption and secure key-value storage.
+///
+/// Biometric authentication has been moved to [BiometricAuthService]
+/// which uses hardware-backed signatures instead of the boolean-only
+/// `local_auth` package.
 class SecurityService {
   final FlutterSecureStorage _secureStorage;
-  final LocalAuthentication _localAuth;
 
   SecurityService({
     FlutterSecureStorage? secureStorage,
-    LocalAuthentication? localAuth,
-  }) : _secureStorage = secureStorage ?? const FlutterSecureStorage(),
-       _localAuth = localAuth ?? LocalAuthentication();
+  }) : _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   // ─── AES Encryption ───────────────────────────────────────────
 
@@ -70,34 +70,6 @@ class SecurityService {
       encrypt_pkg.AES(key, mode: encrypt_pkg.AESMode.cbc),
     );
     return encrypter.decrypt64(encryptedBase64, iv: iv);
-  }
-
-  // ─── Biometric Auth ───────────────────────────────────────────
-
-  /// Check if device supports biometrics.
-  Future<bool> isBiometricAvailable() async {
-    try {
-      final isAvailable = await _localAuth.canCheckBiometrics;
-      final isDeviceSupported = await _localAuth.isDeviceSupported();
-      return isAvailable && isDeviceSupported;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  /// Prompt biometric authentication.
-  Future<bool> authenticateWithBiometrics() async {
-    try {
-      return await _localAuth.authenticate(
-        localizedReason: 'Authenticate to access NexusNode Lite',
-        options: const AuthenticationOptions(
-          stickyAuth: true,
-          biometricOnly: false,
-        ),
-      );
-    } catch (_) {
-      return false;
-    }
   }
 
   // ─── Secure Storage Helpers ───────────────────────────────────

@@ -34,8 +34,8 @@ class HistoryScreen extends ConsumerWidget {
             child: ListTile(
               leading: CircleAvatar(
                 backgroundColor: isSent
-                    ? Colors.red.withOpacity(0.2)
-                    : Colors.green.withOpacity(0.2),
+                    ? Colors.red.withValues(alpha: 0.2)
+                    : Colors.green.withValues(alpha: 0.2),
                 child: Icon(
                   isSent ? Icons.arrow_upward : Icons.arrow_downward,
                   color: isSent ? Colors.redAccent : Colors.greenAccent,

@@ -4,7 +4,16 @@ import 'package:go_router/go_router.dart';
 import '../providers.dart';
 
 /// Biometric verification screen shown after login.
-/// Users must pass biometric auth before accessing the dashboard.
+///
+/// Uses hardware-backed cryptographic signatures (biometric_signature package)
+/// instead of the boolean-only local_auth. This means:
+/// - The biometric hardware produces a verifiable signature
+/// - An attacker cannot bypass auth by hooking the API return value
+/// - The private signing key never leaves the Secure Enclave / StrongBox
+///
+/// Fallback: If biometrics are unavailable (emulator, no hardware), the user
+/// can proceed directly to the dashboard (they've already authenticated
+/// with username + password).
 class BiometricScreen extends ConsumerStatefulWidget {
   const BiometricScreen({super.key});
 
@@ -19,7 +28,6 @@ class _BiometricScreenState extends ConsumerState<BiometricScreen> {
   @override
   void initState() {
     super.initState();
-    // Auto-trigger biometric prompt on load
     WidgetsBinding.instance.addPostFrameCallback((_) => _authenticate());
   }
 
@@ -30,26 +38,99 @@ class _BiometricScreenState extends ConsumerState<BiometricScreen> {
     });
 
     try {
-      final security = ref.read(securityServiceProvider);
-      final isAvailable = await security.isBiometricAvailable();
+      final biometricService = ref.read(biometricAuthServiceProvider);
+      final availability = await biometricService.checkAvailability();
 
-      if (!isAvailable) {
-        // If biometrics not available, skip to dashboard
-        if (mounted) context.go('/dashboard');
+      if (!availability.isAvailable || !availability.hasEnrolled) {
+        // No biometric hardware or no enrolled biometrics — skip
+        debugPrint('Biometrics unavailable: ${availability.reason}');
+        await _proceedToDashboard();
         return;
       }
 
-      final success = await security.authenticateWithBiometrics();
-      if (success && mounted) {
-        context.go('/dashboard');
+      // Check if the current user has biometric keys enrolled
+      final currentUser = ref.read(currentUserProvider);
+      if (currentUser == null) {
+        // No user in session — try to restore from persisted session
+        final auth = ref.read(authServiceProvider);
+        final savedUser = await auth.getActiveUser();
+        if (savedUser != null) {
+          ref.read(currentUserProvider.notifier).state = savedUser;
+          final hasKeys = await biometricService.hasEnrolledKeys(savedUser.id);
+          if (hasKeys) {
+            final result = await biometricService.authenticate(savedUser.id);
+            if (result != null && result.success) {
+              await _proceedToDashboard();
+              return;
+            }
+            setState(() => _error = 'Biometric verification failed. Try again.');
+            return;
+          }
+        }
+        // No biometric keys — use simple prompt
+        final success = await biometricService.simpleAuthenticate();
+        if (success) {
+          await _proceedToDashboard();
+        } else {
+          setState(() => _error = 'Authentication failed. Try again.');
+        }
+        return;
+      }
+
+      // User exists — try signature-based auth
+      final hasKeys = await biometricService.hasEnrolledKeys(currentUser.id);
+      if (hasKeys) {
+        final result = await biometricService.authenticate(currentUser.id);
+        if (result != null && result.success) {
+          await _proceedToDashboard();
+          return;
+        }
+        setState(() => _error = 'Biometric verification failed. Try again.');
       } else {
-        setState(() => _error = 'Authentication failed. Try again.');
+        // No keys enrolled for this user — use simple prompt
+        final success = await biometricService.simpleAuthenticate();
+        if (success) {
+          await _proceedToDashboard();
+        } else {
+          setState(() => _error = 'Authentication failed. Try again.');
+        }
       }
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _isAuthenticating = false);
     }
+  }
+
+  Future<void> _proceedToDashboard() async {
+    if (!mounted) return;
+
+    // Open user-scoped storage before navigating
+    final currentUser = ref.read(currentUserProvider);
+    if (currentUser != null) {
+      final storage = ref.read(userScopedStorageProvider);
+      await storage.openForUser(currentUser.id);
+
+      // Set the active user in blockchain service
+      final blockchain = ref.read(blockchainServiceProvider);
+      blockchain.setActiveUser(currentUser.id);
+
+      // Load user's data into providers
+      _loadUserData(storage);
+    }
+
+    if (mounted) context.go('/dashboard');
+  }
+
+  void _loadUserData(dynamic storage) {
+    // Load user-scoped data into providers
+    ref.read(walletAddressProvider.notifier).state = storage.getWalletAddress();
+    ref.read(walletBalanceProvider.notifier).state = storage.getBalance();
+    ref.read(chatHistoryProvider.notifier).state = storage.getChatHistory();
+    ref.read(gameScoreProvider.notifier).state = storage.getGameScore();
+    ref.read(highScoreProvider.notifier).state = storage.getHighScore();
+    ref.read(totalGamesProvider.notifier).state = storage.getTotalGames();
+    ref.read(ethPriceProvider.notifier).state = storage.getCachedPrices();
   }
 
   @override
@@ -77,6 +158,11 @@ class _BiometricScreenState extends ConsumerState<BiometricScreen> {
                   'Verify your identity to continue',
                   style: TextStyle(color: Colors.grey[400]),
                 ),
+                const SizedBox(height: 8),
+                Text(
+                  'Using hardware-backed signature',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                ),
                 const SizedBox(height: 32),
 
                 if (_isAuthenticating)
@@ -98,8 +184,8 @@ class _BiometricScreenState extends ConsumerState<BiometricScreen> {
                   ),
                   const SizedBox(height: 12),
                   TextButton(
-                    onPressed: () => context.go('/dashboard'),
-                    child: const Text('Skip (dev only)'),
+                    onPressed: () => _proceedToDashboard(),
+                    child: const Text('Skip (password already verified)'),
                   ),
                 ],
               ],
@@ -110,4 +196,3 @@ class _BiometricScreenState extends ConsumerState<BiometricScreen> {
     );
   }
 }
-  

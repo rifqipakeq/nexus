@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers.dart';
 
 /// AI Chatbot screen using Google Gemini API.
+/// Uses user-scoped storage for chat history isolation.
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
 
@@ -28,11 +29,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _controller.clear();
 
     // Add user message
-    final db = ref.read(localDbProvider);
+    final storage = ref.read(userScopedStorageProvider);
     final userMsg = {'role': 'user', 'text': text};
-    await db.addChatMessage(userMsg);
+    await storage.addChatMessage(userMsg);
 
-    ref.read(chatHistoryProvider.notifier).state = db.getChatHistory();
+    ref.read(chatHistoryProvider.notifier).state = storage.getChatHistory();
     ref.read(chatLoadingProvider.notifier).state = true;
 
     _scrollToBottom();
@@ -42,9 +43,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final response = await gemini.sendMessage(text);
 
     final aiMsg = {'role': 'assistant', 'text': response};
-    await db.addChatMessage(aiMsg);
+    await storage.addChatMessage(aiMsg);
 
-    ref.read(chatHistoryProvider.notifier).state = db.getChatHistory();
+    ref.read(chatHistoryProvider.notifier).state = storage.getChatHistory();
     ref.read(chatLoadingProvider.notifier).state = false;
 
     _scrollToBottom();
@@ -63,8 +64,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _clearHistory() async {
-    final db = ref.read(localDbProvider);
-    await db.clearChatHistory();
+    final storage = ref.read(userScopedStorageProvider);
+    await storage.clearChatHistory();
     ref.read(chatHistoryProvider.notifier).state = [];
   }
 

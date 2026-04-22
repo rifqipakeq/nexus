@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../providers.dart';
 
 /// Send Transaction screen – enabled only inside safe zone.
+/// Now triggers local notification on successful send.
 class SendTransactionScreen extends ConsumerStatefulWidget {
   const SendTransactionScreen({super.key});
 
@@ -52,6 +53,25 @@ class _SendTransactionScreenState extends ConsumerState<SendTransactionScreen> {
         toAddress: address,
         amountInEth: amount,
       );
+
+      // Show local notification for the sent transaction
+      final notifications = ref.read(notificationServiceProvider);
+      await notifications.showTransactionSent(
+        amount: amount,
+        toAddress: address,
+        txHash: txHash,
+      );
+
+      // Update balance tracking for dedup
+      final storage = ref.read(userScopedStorageProvider);
+      final walletAddress = ref.read(walletAddressProvider);
+      if (walletAddress != null) {
+        final newBalance = await blockchain.getBalance(walletAddress);
+        ref.read(walletBalanceProvider.notifier).state = newBalance;
+        await storage.saveBalance(newBalance);
+        await storage.saveLastNotifiedBalance(newBalance);
+      }
+
       setState(() => _result = 'Success! TX: $txHash');
     } catch (e) {
       setState(() => _result = 'Error: $e');
@@ -76,8 +96,8 @@ class _SendTransactionScreenState extends ConsumerState<SendTransactionScreen> {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: isInSafeZone
-                    ? Colors.green.withOpacity(0.1)
-                    : Colors.red.withOpacity(0.1),
+                    ? Colors.green.withValues(alpha: 0.1)
+                    : Colors.red.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: isInSafeZone ? Colors.greenAccent : Colors.redAccent,

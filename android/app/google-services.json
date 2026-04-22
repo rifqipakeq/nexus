@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "894004697777",
-    "project_id": "nexus-148d2",
-    "storage_bucket": "nexus-148d2.firebasestorage.app"
+    "project_number": "926528900147",
+    "project_id": "nexus-node-f141f",
+    "storage_bucket": "nexus-node-f141f.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:894004697777:android:2904a807629b8f8da2a090",
+        "mobilesdk_app_id": "1:926528900147:android:e5809da4a4dfc7ec6ce746",
         "android_client_info": {
           "package_name": "com.nexusnode.nexus_node_lite"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAAau-fHuvWa1sOtypuJ9X4Jb0ytI2-R7o"
+          "current_key": "AIzaSyCqd6dhrzon08AHT9t4P7sxg7Edl61etw8"
         }
       ],
       "services": {

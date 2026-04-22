@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers.dart';
 
+/// Reaction game screen. Uses user-scoped storage for game score isolation.
 class GameScreen extends ConsumerStatefulWidget {
   const GameScreen({super.key});
 
@@ -47,7 +48,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     });
   }
 
-  // fungsi spawn lingkaran acak
   void _spawnCircle() {
     final size = MediaQuery.of(context).size;
 
@@ -58,7 +58,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       _spawnTime = DateTime.now();
     });
 
-    // Penalti jika user tidak menekan
     _roundTimer = Timer(Duration(milliseconds: _difficultyMs), () {
       if (_isCircleVisible) {
         setState(() {
@@ -69,7 +68,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     });
   }
 
-  // fungsi saat lingkaran ditekan
   Future<void> _onTapCircle() async {
     if (_spawnTime == null) return;
 
@@ -78,22 +76,20 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     int score = ref.read(gameScoreProvider);
     int totalGames = ref.read(totalGamesProvider);
 
-    // logic scoring: semakin cepat, semakin banyak poin (maks 1000ms = 100 poin, min 10 poin)
     final gained = (1000 - reactionTime).clamp(10, 100);
     score += gained;
     totalGames++;
 
-    // setiap 5 poin, tingkat kesulitan naik
     _difficultyMs = (_difficultyMs * 0.9).clamp(400, 2000).toInt();
 
-    // simpan data game
-    final db = ref.read(localDbProvider);
-    await db.saveGameScore(score);
-    await db.saveHighScore(score);
-    await db.saveTotalGames(totalGames);
+    // Save to user-scoped storage
+    final storage = ref.read(userScopedStorageProvider);
+    await storage.saveGameScore(score);
+    await storage.saveHighScore(score);
+    await storage.saveTotalGames(totalGames);
 
     ref.read(gameScoreProvider.notifier).state = score;
-    ref.read(highScoreProvider.notifier).state = db.getHighScore();
+    ref.read(highScoreProvider.notifier).state = storage.getHighScore();
     ref.read(totalGamesProvider.notifier).state = totalGames;
 
     setState(() {
@@ -151,7 +147,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                         ),
                       ),
 
-                    // Indikator kecepatan
                     Positioned(
                       bottom: 20,
                       left: 20,
@@ -171,7 +166,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   }
 }
 
-// Widget  score, best score, dan total games
 class _ScoreTile extends StatelessWidget {
   final String label;
   final String value;

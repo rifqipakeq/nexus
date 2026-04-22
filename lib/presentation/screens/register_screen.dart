@@ -3,47 +3,33 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers.dart';
 
-/// Local authentication login screen.
-/// Replaces the Firebase-dependent login with local PBKDF2-hashed credentials.
-class LoginScreen extends ConsumerStatefulWidget {
-  const LoginScreen({super.key});
+/// Registration screen for creating a new local account.
+class RegisterScreen extends ConsumerStatefulWidget {
+  const RegisterScreen({super.key});
 
   @override
-  ConsumerState<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _LoginScreenState extends ConsumerState<LoginScreen> {
+class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _enrollBiometric = true;
   String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _checkExistingSession();
-  }
-
-  /// Check if a session exists from a previous app launch.
-  /// If so, route to biometric verification for session resume.
-  Future<void> _checkExistingSession() async {
-    final auth = ref.read(authServiceProvider);
-    final hasSession = await auth.hasActiveSession();
-    if (hasSession && mounted) {
-      context.go('/biometric');
-    }
-  }
 
   @override
   void dispose() {
     _usernameController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  Future<void> _login() async {
+  Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
@@ -53,9 +39,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     try {
       final auth = ref.read(authServiceProvider);
-      final result = await auth.login(
+      final result = await auth.register(
         username: _usernameController.text.trim(),
         password: _passwordController.text,
+        enrollBiometric: _enrollBiometric,
       );
 
       if (!result.success) {
@@ -66,7 +53,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       // Set current user in provider
       ref.read(currentUserProvider.notifier).state = result.user;
 
-      if (mounted) context.go('/biometric');
+      if (mounted) {
+        // Show success and navigate to dashboard
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Account created: ${result.user!.username}',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+        context.go('/dashboard');
+      }
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -77,6 +75,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Create Account'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.go('/login'),
+        ),
+      ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -86,23 +91,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Logo / Title
                   const Icon(
-                    Icons.account_balance_wallet,
-                    size: 80,
+                    Icons.person_add,
+                    size: 64,
                     color: Color(0xFF6C63FF),
                   ),
                   const SizedBox(height: 16),
                   const Text(
-                    'NexusNode Lite',
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                    'Create New Account',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Web3 Testnet Portfolio',
-                    style: TextStyle(fontSize: 14, color: Colors.grey[400]),
+                    'Your password is hashed locally and never stored in plaintext.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 32),
 
                   // Username
                   TextFormField(
@@ -110,10 +115,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Username',
                       prefixIcon: Icon(Icons.person_outline),
+                      hintText: 'At least 3 characters',
                     ),
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) {
                         return 'Username required';
+                      }
+                      if (v.trim().length < 3) {
+                        return 'At least 3 characters';
                       }
                       return null;
                     },
@@ -127,6 +136,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     decoration: InputDecoration(
                       labelText: 'Password',
                       prefixIcon: const Icon(Icons.lock_outline),
+                      hintText: 'At least 6 characters',
                       suffixIcon: IconButton(
                         icon: Icon(
                           _obscurePassword
@@ -144,7 +154,37 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
+
+                  // Confirm Password
+                  TextFormField(
+                    controller: _confirmPasswordController,
+                    obscureText: _obscurePassword,
+                    decoration: const InputDecoration(
+                      labelText: 'Confirm Password',
+                      prefixIcon: Icon(Icons.lock_outline),
+                    ),
+                    validator: (v) {
+                      if (v != _passwordController.text) {
+                        return 'Passwords do not match';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Biometric enrollment toggle
+                  SwitchListTile(
+                    title: const Text('Enable Biometric Login'),
+                    subtitle: Text(
+                      'Use fingerprint or face to sign in',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    ),
+                    value: _enrollBiometric,
+                    onChanged: (v) => setState(() => _enrollBiometric = v),
+                    activeTrackColor: const Color(0xFF6C63FF),
+                  ),
+                  const SizedBox(height: 16),
 
                   // Error message
                   if (_error != null)
@@ -157,11 +197,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                     ),
 
-                  // Login button
+                  // Register button
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: _isLoading ? null : _login,
+                      onPressed: _isLoading ? null : _register,
                       child: _isLoading
                           ? const SizedBox(
                               height: 20,
@@ -171,21 +211,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 color: Colors.white,
                               ),
                             )
-                          : const Text('Login'),
+                          : const Text('Create Account'),
                     ),
                   ),
                   const SizedBox(height: 12),
 
-                  // Register link
                   TextButton(
-                    onPressed: () => context.go('/register'),
-                    child: const Text('No account? Register'),
-                  ),
-
-                  // Account switcher link
-                  TextButton(
-                    onPressed: () => context.push('/accounts'),
-                    child: const Text('Switch Account'),
+                    onPressed: () => context.go('/login'),
+                    child: const Text('Already have an account? Login'),
                   ),
                 ],
               ),

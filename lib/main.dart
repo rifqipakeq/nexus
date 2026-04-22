@@ -2,22 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'core/theme.dart';
 import 'core/constants.dart';
 import 'core/session_manager.dart';
 import 'core/router.dart';
-import 'data/local/local_database_service.dart';
+import 'data/local/user_scoped_storage.dart';
 import 'data/services/security_service.dart';
+import 'data/services/auth_service.dart';
 import 'data/services/notification_service.dart';
-
-/// Background message handler for Firebase Cloud Messaging.
-@pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
-}
+import 'presentation/providers.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,35 +22,39 @@ Future<void> main() async {
   // Initialize Hive
   await Hive.initFlutter();
 
-  // Initialize Firebase
-  bool firebaseReady = false;
-  try {
-    await Firebase.initializeApp();
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-    firebaseReady = true;
-    debugPrint('Firebase initialized successfully');
-  } catch (e) {
-    debugPrint('Firebase init failed: $e');
-    debugPrint('App will run without Firebase features');
-  }
+  // Initialize global storage (prices box)
+  final storage = UserScopedStorage();
+  await storage.initGlobal();
 
-  // Initialize local database
-  final localDb = LocalDatabaseService();
-  await localDb.init();
+  // Initialize the accounts box
+  final auth = AuthService();
+  await auth.init();
 
   // Initialize encryption keys
   final security = SecurityService();
   await security.ensureEncryptionKeys();
 
-  // Initialize notifications
+  // Initialize local notifications (no Firebase)
   final notifications = NotificationService();
   try {
-    await notifications.initialize(firebaseAvailable: firebaseReady);
+    await notifications.initialize();
   } catch (e) {
     debugPrint('Notification init failed: $e');
   }
 
-  runApp(const ProviderScope(child: NexusNodeApp()));
+  // Pass pre-initialized instances into Riverpod so providers don't
+  // create separate (uninitialized) objects.
+  runApp(
+    ProviderScope(
+      overrides: [
+        authServiceProvider.overrideWithValue(auth),
+        userScopedStorageProvider.overrideWithValue(storage),
+        securityServiceProvider.overrideWithValue(security),
+        notificationServiceProvider.overrideWithValue(notifications),
+      ],
+      child: const NexusNodeApp(),
+    ),
+  );
 }
 
 class NexusNodeApp extends ConsumerWidget {

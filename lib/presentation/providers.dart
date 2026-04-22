@@ -1,6 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import '../data/models/user_account.dart';
 import '../data/services/security_service.dart';
+import '../data/services/auth_service.dart';
+import '../data/services/password_service.dart';
+import '../data/services/biometric_auth_service.dart';
 import '../data/services/api_service.dart';
 import '../data/services/blockchain_service.dart';
 import '../data/services/notification_service.dart';
@@ -8,12 +11,27 @@ import '../data/services/location_service.dart';
 import '../data/services/motion_service.dart';
 import '../data/services/gemini_service.dart';
 import '../data/services/price_service.dart';
-import '../data/local/local_database_service.dart';
+import '../data/local/user_scoped_storage.dart';
 
-// ─── Service Providers ──────────────────────────────────────────
+// ─── Core Service Providers ─────────────────────────────────────
 
 final securityServiceProvider = Provider<SecurityService>((ref) {
   return SecurityService();
+});
+
+final passwordServiceProvider = Provider<PasswordService>((ref) {
+  return PasswordService();
+});
+
+final biometricAuthServiceProvider = Provider<BiometricAuthService>((ref) {
+  return BiometricAuthService();
+});
+
+final authServiceProvider = Provider<AuthService>((ref) {
+  return AuthService(
+    passwordService: ref.read(passwordServiceProvider),
+    biometricService: ref.read(biometricAuthServiceProvider),
+  );
 });
 
 final apiServiceProvider = Provider<ApiService>((ref) {
@@ -44,36 +62,38 @@ final priceServiceProvider = Provider<PriceService>((ref) {
   return PriceService(ref.read(apiServiceProvider));
 });
 
-final localDbProvider = Provider<LocalDatabaseService>((ref) {
-  return LocalDatabaseService();
+final userScopedStorageProvider = Provider<UserScopedStorage>((ref) {
+  return UserScopedStorage();
 });
 
 // ─── Auth State ─────────────────────────────────────────────────
 
-final firebaseAuthProvider = Provider<FirebaseAuth>((ref) {
-  return FirebaseAuth.instance;
+/// The currently authenticated user. Null means no active session.
+final currentUserProvider = StateProvider<UserAccount?>((ref) => null);
+
+/// Whether the app is in an authenticated state.
+final isAuthenticatedProvider = Provider<bool>((ref) {
+  return ref.watch(currentUserProvider) != null;
 });
 
-final authStateProvider = StreamProvider<User?>((ref) {
-  return ref.read(firebaseAuthProvider).authStateChanges();
+/// All registered accounts (for account switcher UI).
+final allAccountsProvider = Provider<List<UserAccount>>((ref) {
+  final auth = ref.read(authServiceProvider);
+  return auth.getAllAccounts();
 });
 
 // ─── Wallet State ───────────────────────────────────────────────
 
-final walletAddressProvider = StateProvider<String?>((ref) {
-  return ref.read(localDbProvider).getWalletAddress();
-});
+final walletAddressProvider = StateProvider<String?>((ref) => null);
 
-final walletBalanceProvider = StateProvider<double>((ref) {
-  return ref.read(localDbProvider).getBalance();
-});
+final walletBalanceProvider = StateProvider<double>((ref) => 0.0);
 
 final balanceVisibleProvider = StateProvider<bool>((ref) => true);
 
 // ─── Price State ────────────────────────────────────────────────
 
 final ethPriceProvider = StateProvider<Map<String, double>>((ref) {
-  return ref.read(localDbProvider).getCachedPrices();
+  return {'usd': 0.0, 'idr': 0.0};
 });
 
 // ─── Location State ─────────────────────────────────────────────
@@ -83,21 +103,15 @@ final isInSafeZoneProvider = StateProvider<bool>((ref) => false);
 // ─── Chat State ─────────────────────────────────────────────────
 
 final chatHistoryProvider = StateProvider<List<Map<String, String>>>((ref) {
-  return ref.read(localDbProvider).getChatHistory();
+  return [];
 });
 
 final chatLoadingProvider = StateProvider<bool>((ref) => false);
 
 // ─── Game State ─────────────────────────────────────────────────
 
-final gameScoreProvider = StateProvider<int>((ref) {
-  return ref.read(localDbProvider).getGameScore();
-});
+final gameScoreProvider = StateProvider<int>((ref) => 0);
 
-final highScoreProvider = StateProvider<int>((ref) {
-  return ref.read(localDbProvider).getHighScore();
-});
+final highScoreProvider = StateProvider<int>((ref) => 0);
 
-final totalGamesProvider = StateProvider<int>((ref) {
-  return ref.read(localDbProvider).getTotalGames();
-});
+final totalGamesProvider = StateProvider<int>((ref) => 0);

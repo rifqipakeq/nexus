@@ -6,17 +6,41 @@ import '../../core/env_config.dart';
 import 'security_service.dart';
 
 /// Manages Ethereum Sepolia wallet operations.
+///
+/// Private keys are encrypted with AES-256 and stored in secure storage,
+/// scoped to the active user's ID to prevent cross-user access.
 class BlockchainService {
   final SecurityService _security;
   late final Web3Client _client;
+
+  /// The currently active user's ID. Used to scope private key storage.
+  String? _activeUserId;
 
   BlockchainService(this._security) {
     _client = Web3Client(EnvConfig.alchemyRpc, http.Client());
   }
 
+  /// Set the active user ID. Must be called after login.
+  void setActiveUser(String userId) {
+    _activeUserId = userId;
+  }
+
+  /// Clear the active user (on logout).
+  void clearActiveUser() {
+    _activeUserId = null;
+  }
+
+  String get _privateKeyStorageKey {
+    if (_activeUserId == null) {
+      throw StateError('No active user set. Call setActiveUser() first.');
+    }
+    return AppConstants.secureKeyPrivateKey(_activeUserId!);
+  }
+
   // ─── Wallet Generation ────────────────────────────────────────
 
   /// Generates a new Ethereum wallet, encrypts the private key, and returns the address.
+  /// The private key is stored under the active user's scoped key.
   Future<Map<String, String>> generateWallet() async {
     final rng = Random.secure();
     final credentials = EthPrivateKey.createRandom(rng);
@@ -25,7 +49,7 @@ class BlockchainService {
 
     // Encrypt private key before storing
     final encryptedKey = await _security.encryptData(privateKeyHex);
-    await _security.saveSecure(AppConstants.secureKeyPrivateKey, encryptedKey);
+    await _security.saveSecure(_privateKeyStorageKey, encryptedKey);
 
     return {
       'address': address.hexEip55,
@@ -35,9 +59,7 @@ class BlockchainService {
 
   /// Loads wallet credentials from encrypted secure storage.
   Future<EthPrivateKey?> _loadCredentials() async {
-    final encryptedKey = await _security.readSecure(
-      AppConstants.secureKeyPrivateKey,
-    );
+    final encryptedKey = await _security.readSecure(_privateKeyStorageKey);
     if (encryptedKey == null) return null;
     final privateKeyHex = await _security.decryptData(encryptedKey);
     return EthPrivateKey.fromHex(privateKeyHex);
