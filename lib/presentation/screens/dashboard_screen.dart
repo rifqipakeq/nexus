@@ -589,12 +589,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   ),
                   _ActionCard(
                     icon: Icons.videogame_asset,
-                    label: 'Price Game',
+                    label: 'Reaction Game',
                     onTap: () => context.push('/game'),
                   ),
                   _ActionCard(
                     icon: Icons.history,
-                    label: 'History',
+                    label: 'Riwayat',
                     onTap: () => context.push('/history'),
                   ),
                   _ActionCard(
