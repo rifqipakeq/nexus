@@ -44,5 +44,10 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Environment secrets (keep .env.example in repo, not .env with real keys)
-# .env
+# Environment secrets
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+*.env
