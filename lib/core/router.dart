@@ -12,7 +12,7 @@ import '../presentation/screens/send_transaction_screen.dart';
 import '../presentation/screens/history_screen.dart';
 import '../presentation/screens/account_switcher_screen.dart';
 
-/// GoRouter configuration with all app routes.
+/// GoRouter config
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/login',
@@ -50,6 +50,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
     ],
     errorBuilder: (context, state) =>
-        Scaffold(body: Center(child: Text('Page not found: ${state.uri}'))),
+        Scaffold(body: Center(child: Text('Halaman tidak ditemukan: ${state.uri}'))),
   );
 });

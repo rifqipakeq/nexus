@@ -1,28 +1,9 @@
-/// Data model representing a locally-stored user account.
-///
-/// Passwords are NEVER stored in plaintext. Only the [passwordHash]
-/// (derived via PBKDF2-HMAC-SHA256) and the [salt] used for derivation
-/// are persisted. The biometric public key is stored so the app can
-/// verify cryptographic signatures produced by the hardware-backed
-/// biometric key.
 class UserAccount {
-  /// Unique user identifier (UUID v4).
   final String id;
-
-  /// Human-readable username (unique, case-insensitive).
   final String username;
-
-  /// Base64-encoded PBKDF2-HMAC-SHA256 hash of the password.
   final String passwordHash;
-
-  /// Base64-encoded random salt (32 bytes) used during hashing.
   final String salt;
-
-  /// Base64-encoded public key from biometric enrollment.
-  /// Null if user has not enrolled biometrics.
   final String? biometricPublicKey;
-
-  /// ISO 8601 creation timestamp.
   final String createdAt;
 
   const UserAccount({
@@ -34,7 +15,6 @@ class UserAccount {
     required this.createdAt,
   });
 
-  /// Serialize to a Map for Hive storage.
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -46,7 +26,6 @@ class UserAccount {
     };
   }
 
-  /// Deserialize from a Hive-stored Map.
   factory UserAccount.fromMap(Map<dynamic, dynamic> map) {
     return UserAccount(
       id: map['id'] as String,
@@ -58,7 +37,7 @@ class UserAccount {
     );
   }
 
-  /// Create a copy with optional field overrides.
+  /// buat salinan untuk update data karena immutable
   UserAccount copyWith({
     String? id,
     String? username,

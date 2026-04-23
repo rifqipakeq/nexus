@@ -3,11 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../providers.dart';
 
-/// Transaction history screen — reads from user-scoped storage.
-///
-/// Transactions are recorded when:
-/// - User sends ETH (from send_transaction_screen.dart)
-/// - Incoming ETH is detected via balance polling (from dashboard_screen.dart)
 class HistoryScreen extends ConsumerWidget {
   const HistoryScreen({super.key});
 
@@ -18,14 +13,14 @@ class HistoryScreen extends ConsumerWidget {
 
     if (address == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Transaction History')),
-        body: const Center(child: Text('No wallet created yet.')),
+        appBar: AppBar(title: const Text('Riwayat Transaksi')),
+        body: const Center(child: Text('Tidak ada dompet yang dibuat.')),
       );
     }
 
     if (history.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Transaction History')),
+        appBar: AppBar(title: const Text('Riwayat Transaksi')),
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -33,12 +28,12 @@ class HistoryScreen extends ConsumerWidget {
               Icon(Icons.receipt_long, size: 64, color: Colors.grey[700]),
               const SizedBox(height: 16),
               Text(
-                'No transactions yet',
+                'Belum ada transaksi',
                 style: TextStyle(color: Colors.grey[500], fontSize: 16),
               ),
               const SizedBox(height: 8),
               Text(
-                'Send or receive ETH to see your history.',
+                'Kirim atau terima ETH untuk melihat riwayat Anda.',
                 style: TextStyle(color: Colors.grey[600], fontSize: 13),
               ),
             ],
@@ -49,7 +44,7 @@ class HistoryScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Transaction History'),
+        title: const Text('Riwayat Transaksi'),
         actions: [
           IconButton(
             icon: const Icon(Icons.delete_outline),
@@ -121,17 +116,17 @@ class HistoryScreen extends ConsumerWidget {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Clear History?'),
-        content: const Text('This will remove all transaction records.'),
+        title: const Text('Bersihkan Riwayat?'),
+        content: const Text('Ini akan menghapus semua catatan transaksi.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: const Text('Batal'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text(
-              'Clear',
+              'Bersihkan',
               style: TextStyle(color: Colors.redAccent),
             ),
           ),

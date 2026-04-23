@@ -8,7 +8,7 @@ class GeminiService {
     final apiKey = EnvConfig.geminiApiKey;
 
     if (apiKey.isEmpty) {
-      throw Exception('GEMINI_API_KEY not set');
+      throw Exception('GEMINI_API_KEY tidak ditemukan.');
     }
 
     _model = GenerativeModel(
@@ -23,7 +23,7 @@ class GeminiService {
         Content.text(prompt),
       ]);
 
-      return response.text ?? 'No response';
+      return response.text ?? 'Tidak ada respon dari model.';
     } catch (e) {
       return 'Error: $e';
     }

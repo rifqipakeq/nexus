@@ -3,8 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers.dart';
 
-/// Send Transaction screen – enabled only inside safe zone.
-/// Now triggers local notification on successful send.
 class SendTransactionScreen extends ConsumerStatefulWidget {
   const SendTransactionScreen({super.key});
 
@@ -38,7 +36,7 @@ class _SendTransactionScreenState extends ConsumerState<SendTransactionScreen> {
     final amount = double.tryParse(_amountController.text.trim());
 
     if (address.isEmpty || amount == null || amount <= 0) {
-      setState(() => _result = 'Invalid address or amount');
+      setState(() => _result = 'Address atau amount tidak valid');
       return;
     }
 
@@ -54,7 +52,6 @@ class _SendTransactionScreenState extends ConsumerState<SendTransactionScreen> {
         amountInEth: amount,
       );
 
-      // Show local notification for the sent transaction
       final notifications = ref.read(notificationServiceProvider);
       await notifications.showTransactionSent(
         amount: amount,
@@ -62,7 +59,6 @@ class _SendTransactionScreenState extends ConsumerState<SendTransactionScreen> {
         txHash: txHash,
       );
 
-      // Update balance tracking for dedup
       final storage = ref.read(userScopedStorageProvider);
       final walletAddress = ref.read(walletAddressProvider);
       if (walletAddress != null) {
@@ -72,7 +68,7 @@ class _SendTransactionScreenState extends ConsumerState<SendTransactionScreen> {
         await storage.saveLastNotifiedBalance(newBalance);
       }
 
-      // Record the sent transaction in history
+      // catat riwayat
       await storage.addTransaction({
         'type': 'sent',
         'from': walletAddress ?? '',
@@ -98,7 +94,7 @@ class _SendTransactionScreenState extends ConsumerState<SendTransactionScreen> {
     final isInSafeZone = ref.watch(isInSafeZoneProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Send Transaction')),
+      appBar: AppBar(title: const Text('Kirim Transaksi')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -126,8 +122,8 @@ class _SendTransactionScreenState extends ConsumerState<SendTransactionScreen> {
                   Expanded(
                     child: Text(
                       isInSafeZone
-                          ? 'You are inside the safe zone. Transactions enabled.'
-                          : 'You are outside the safe zone. Transactions disabled.',
+                          ? 'Anda berada di zona aman. Transaksi diaktifkan.'
+                          : 'Anda berada di luar zona aman. Transaksi dinonaktifkan.',
                       style: TextStyle(
                         color: isInSafeZone
                             ? Colors.greenAccent
@@ -143,7 +139,7 @@ class _SendTransactionScreenState extends ConsumerState<SendTransactionScreen> {
 
             // Recipient address
             const Text(
-              'Recipient Address',
+              'Address Penerima',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
@@ -170,7 +166,7 @@ class _SendTransactionScreenState extends ConsumerState<SendTransactionScreen> {
 
             // Amount
             const Text(
-              'Amount (ETH)',
+              'Jumlah (ETH)',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
@@ -197,7 +193,7 @@ class _SendTransactionScreenState extends ConsumerState<SendTransactionScreen> {
                           color: Colors.white,
                         ),
                       )
-                    : const Text('Send Transaction'),
+                    : const Text('Kirim Transaksi'),
               ),
             ),
             const SizedBox(height: 16),
@@ -213,7 +209,7 @@ class _SendTransactionScreenState extends ConsumerState<SendTransactionScreen> {
                 child: SelectableText(
                   _result!,
                   style: TextStyle(
-                    color: _result!.startsWith('Success')
+                    color: _result!.startsWith('Sukses')
                         ? Colors.greenAccent
                         : Colors.redAccent,
                     fontSize: 13,
@@ -237,8 +233,7 @@ class _SendTransactionScreenState extends ConsumerState<SendTransactionScreen> {
                     const SizedBox(height: 8),
                     Text(
                       '• Network: Ethereum Sepolia Testnet\n'
-                      '• Chain ID: 11155111\n'
-                      '• Get test ETH: sepoliafaucet.com',
+                      '• Chain ID: 11155111\n',
                       style: TextStyle(color: Colors.grey[400], fontSize: 13),
                     ),
                   ],

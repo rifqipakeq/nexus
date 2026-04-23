@@ -4,11 +4,7 @@ import 'package:encrypt/encrypt.dart' as encrypt_pkg;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/constants.dart';
 
-/// Handles AES-256 encryption/decryption and secure key-value storage.
-///
-/// Biometric authentication has been moved to [BiometricAuthService]
-/// which uses hardware-backed signatures instead of the boolean-only
-/// `local_auth` package.
+/// handle semua kebutuhan enkripsi data sensitif dan penyimpanan aman di secure storage.
 class SecurityService {
   final FlutterSecureStorage _secureStorage;
 
@@ -16,9 +12,8 @@ class SecurityService {
     FlutterSecureStorage? secureStorage,
   }) : _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
-  // ─── AES Encryption ───────────────────────────────────────────
-
-  /// Generates and persists a random AES-256 key + IV if not already stored.
+  // AES Encryption
+  /// generate random 32-byte key dan 16-byte IV, simpan di secure storage untuk digunakan di seluruh aplikasi.
   Future<void> ensureEncryptionKeys() async {
     final existingKey = await _secureStorage.read(
       key: AppConstants.secureKeyAesKey,
@@ -51,7 +46,7 @@ class SecurityService {
     return encrypt_pkg.IV.fromBase64(encoded!);
   }
 
-  /// Encrypt plaintext using AES-256 CBC.
+  /// enkripsi plaintext
   Future<String> encryptData(String plainText) async {
     final key = await _getKey();
     final iv = await _getIV();
@@ -62,7 +57,7 @@ class SecurityService {
     return encrypted.base64;
   }
 
-  /// Decrypt AES-256 CBC ciphertext.
+  /// dekripsi ciphertext
   Future<String> decryptData(String encryptedBase64) async {
     final key = await _getKey();
     final iv = await _getIV();
@@ -72,8 +67,7 @@ class SecurityService {
     return encrypter.decrypt64(encryptedBase64, iv: iv);
   }
 
-  // ─── Secure Storage Helpers ───────────────────────────────────
-
+  // helpers 
   Future<void> saveSecure(String key, String value) async {
     await _secureStorage.write(key: key, value: value);
   }

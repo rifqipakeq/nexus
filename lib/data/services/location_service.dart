@@ -2,26 +2,25 @@ import 'dart:math';
 import 'package:geolocator/geolocator.dart';
 import '../../core/env_config.dart';
 
-/// GPS-based safe zone check.
-/// "Send Transaction" button is enabled only when user is inside the safe zone.
+/// GPS function untuk safe zone transaksi
 class LocationService {
-  /// Request location permission and get current position.
+  /// Request location permission and
   Future<Position> getCurrentPosition() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      throw Exception('Location services are disabled.');
+      throw Exception('Layanan lokasi tidak aktif. Silakan aktifkan GPS untuk menggunakan fitur ini.');
     }
 
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        throw Exception('Location permissions are denied.');
+        throw Exception('Izin lokasi ditolak.');
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
-      throw Exception('Location permissions are permanently denied.');
+      throw Exception('Izin lokasi selalu ditolak.');
     }
 
     return await Geolocator.getCurrentPosition(
@@ -29,8 +28,7 @@ class LocationService {
     );
   }
 
-  /// Check if the user is within the configured safe zone radius.
-  /// Returns true if inside, false if outside.
+  /// cek apakah user berada di safe zone
   Future<bool> isInsideSafeZone() async {
     try {
       final position = await getCurrentPosition();
@@ -46,14 +44,14 @@ class LocationService {
     }
   }
 
-  /// Haversine formula to calculate distance in meters between two coordinates.
+  /// rumus untuk menghitung jarak antara dua titik koordinat (Haversine formula)
   double _calculateDistance(
     double lat1,
     double lon1,
     double lat2,
     double lon2,
   ) {
-    const double earthRadius = 6371000; // meters
+    const double earthRadius = 6371000; // meter
     final dLat = _toRadians(lat2 - lat1);
     final dLon = _toRadians(lon2 - lon1);
     final a =

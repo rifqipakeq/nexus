@@ -3,8 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers.dart';
 
-/// Account switcher screen — shows all registered accounts and allows
-/// switching between them.
 class AccountSwitcherScreen extends ConsumerWidget {
   const AccountSwitcherScreen({super.key});
 
@@ -15,7 +13,7 @@ class AccountSwitcherScreen extends ConsumerWidget {
     final currentUser = ref.watch(currentUserProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Switch Account')),
+      appBar: AppBar(title: const Text('Ganti Akun')),
       body: accounts.isEmpty
           ? Center(
               child: Column(
@@ -24,29 +22,28 @@ class AccountSwitcherScreen extends ConsumerWidget {
                   Icon(Icons.person_off, size: 64, color: Colors.grey[700]),
                   const SizedBox(height: 16),
                   Text(
-                    'No accounts registered yet.',
+                    'Belum ada akun yang tersimpan.',
                     style: TextStyle(color: Colors.grey[500]),
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton(
                     onPressed: () => context.go('/register'),
-                    child: const Text('Create Account'),
+                    child: const Text('Buat Akun'),
                   ),
                 ],
               ),
             )
           : ListView.builder(
               padding: const EdgeInsets.all(16),
-              itemCount: accounts.length + 1, // +1 for "Add Account" button
+              itemCount: accounts.length + 1, // +1 untuk tombol "Add Account"
               itemBuilder: (context, index) {
                 if (index == accounts.length) {
-                  // "Add Account" button at the bottom
                   return Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: OutlinedButton.icon(
                       onPressed: () => context.go('/register'),
                       icon: const Icon(Icons.person_add),
-                      label: const Text('Add New Account'),
+                      label: const Text('Tambah Akun Baru'),
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.all(16),
                       ),
@@ -88,14 +85,14 @@ class AccountSwitcherScreen extends ConsumerWidget {
                         ),
                         if (account.biometricPublicKey != null)
                           const Text(
-                            '🔐 Biometric enrolled',
+                            'Biometrik terdaftar',
                             style: TextStyle(fontSize: 11, color: Colors.greenAccent),
                           ),
                       ],
                     ),
                     trailing: isActive
                         ? const Chip(
-                            label: Text('Active', style: TextStyle(fontSize: 11)),
+                            label: Text('Aktif', style: TextStyle(fontSize: 11)),
                             backgroundColor: Color(0xFF6C63FF),
                           )
                         : const Icon(Icons.chevron_right),
@@ -116,7 +113,7 @@ class AccountSwitcherScreen extends ConsumerWidget {
   ) async {
     final auth = ref.read(authServiceProvider);
 
-    // If the user has biometric enrolled, use biometric auth for switching
+    // jika user terdaftar biomerik, gunakan biometric untuk switch
     final account = auth.getUserById(userId);
     if (account == null) return;
 
@@ -126,7 +123,7 @@ class AccountSwitcherScreen extends ConsumerWidget {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(result.error ?? 'Biometric auth failed'),
+              content: Text(result.error ?? 'Autentikasi biometrik gagal'),
               backgroundColor: Colors.redAccent,
             ),
           );
@@ -135,7 +132,7 @@ class AccountSwitcherScreen extends ConsumerWidget {
       }
       ref.read(currentUserProvider.notifier).state = result.user;
     } else {
-      // Without biometrics, switch directly (user was already authenticated before)
+      // tanpa biometric, langsung switch akun 
       final result = await auth.switchAccount(userId);
       if (!result.success) return;
       ref.read(currentUserProvider.notifier).state = result.user;

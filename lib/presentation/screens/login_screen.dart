@@ -3,8 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers.dart';
 
-/// Local authentication login screen.
-/// Replaces the Firebase-dependent login with local PBKDF2-hashed credentials.
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
@@ -26,8 +24,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _checkExistingSession();
   }
 
-  /// Check if a session exists from a previous app launch.
-  /// If so, route to biometric verification for session resume.
   Future<void> _checkExistingSession() async {
     final auth = ref.read(authServiceProvider);
     final hasSession = await auth.hasActiveSession();
@@ -63,7 +59,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         return;
       }
 
-      // Set current user in provider
       ref.read(currentUserProvider.notifier).state = result.user;
 
       if (mounted) context.go('/biometric');
@@ -94,12 +89,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                   const SizedBox(height: 16),
                   const Text(
-                    'NexusNode Lite',
+                    'NexusNode',
                     style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Web3 Testnet Portfolio',
+                    'Web3 Testnet Wallet',
                     style: TextStyle(fontSize: 14, color: Colors.grey[400]),
                   ),
                   const SizedBox(height: 40),
@@ -113,7 +108,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) {
-                        return 'Username required';
+                        return 'Wajib diisi';
                       }
                       return null;
                     },
@@ -139,8 +134,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                     ),
                     validator: (v) {
-                      if (v == null || v.isEmpty) return 'Password required';
-                      if (v.length < 6) return 'Min 6 characters';
+                      if (v == null || v.isEmpty) return 'Wajib diisi';
+                      if (v.length < 6) return 'Min 6 karakter';
                       return null;
                     },
                   ),
@@ -179,13 +174,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   // Register link
                   TextButton(
                     onPressed: () => context.go('/register'),
-                    child: const Text('No account? Register'),
+                    child: const Text('Belum punya akun? Daftar di sini'),
                   ),
 
                   // Account switcher link
                   TextButton(
                     onPressed: () => context.push('/accounts'),
-                    child: const Text('Switch Account'),
+                    child: const Text('Ganti akun'),
                   ),
                 ],
               ),

@@ -1,7 +1,6 @@
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-/// Centralized environment variable access.
-/// All values come from `.env` file via flutter_dotenv.
+/// akses ke env vairable
 class EnvConfig {
   EnvConfig._();
 

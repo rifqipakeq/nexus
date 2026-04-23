@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers.dart';
 
-/// Registration screen for creating a new local account.
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
 
@@ -50,14 +49,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         return;
       }
 
-      // Set current user in provider
       ref.read(currentUserProvider.notifier).state = result.user;
 
-      // Open user-scoped storage for the new user
       final storage = ref.read(userScopedStorageProvider);
       await storage.openForUser(result.user!.id);
 
-      // Set active user in blockchain service
       final blockchain = ref.read(blockchainServiceProvider);
       blockchain.setActiveUser(result.user!.id);
 
@@ -66,7 +62,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Account created: ${result.user!.username}',
+              'Akun dibuat: ${result.user!.username}',
             ),
             backgroundColor: Colors.green,
           ),
@@ -84,7 +80,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Create Account'),
+        title: const Text('Buat Akun'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/login'),
@@ -106,12 +102,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   ),
                   const SizedBox(height: 16),
                   const Text(
-                    'Create New Account',
+                    'Buat Akun Baru',
                     style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Your password is hashed locally and never stored in plaintext.',
+                    'Password disimpan secara aman',
                     style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                     textAlign: TextAlign.center,
                   ),
@@ -123,14 +119,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Username',
                       prefixIcon: Icon(Icons.person_outline),
-                      hintText: 'At least 3 characters',
+                      hintText: 'Minimal 3 karakter',
                     ),
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) {
-                        return 'Username required';
+                        return 'Username wajib diisi';
                       }
                       if (v.trim().length < 3) {
-                        return 'At least 3 characters';
+                        return 'Minimal 3 karakter';
                       }
                       return null;
                     },
@@ -144,7 +140,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     decoration: InputDecoration(
                       labelText: 'Password',
                       prefixIcon: const Icon(Icons.lock_outline),
-                      hintText: 'At least 6 characters',
+                      hintText: 'Minimal 6 karakter',
                       suffixIcon: IconButton(
                         icon: Icon(
                           _obscurePassword
@@ -157,8 +153,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       ),
                     ),
                     validator: (v) {
-                      if (v == null || v.isEmpty) return 'Password required';
-                      if (v.length < 6) return 'Min 6 characters';
+                      if (v == null || v.isEmpty) return 'Password wajib diisi';
+                      if (v.length < 6) return 'Minimal 6 karakter';
                       return null;
                     },
                   ),
@@ -169,12 +165,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     controller: _confirmPasswordController,
                     obscureText: _obscurePassword,
                     decoration: const InputDecoration(
-                      labelText: 'Confirm Password',
+                      labelText: 'Konfirmasi Password',
                       prefixIcon: Icon(Icons.lock_outline),
                     ),
                     validator: (v) {
                       if (v != _passwordController.text) {
-                        return 'Passwords do not match';
+                        return 'Password tidak cocok';
                       }
                       return null;
                     },
@@ -183,9 +179,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
                   // Biometric enrollment toggle
                   SwitchListTile(
-                    title: const Text('Enable Biometric Login'),
+                    title: const Text('Aktifkan Login Biometrik'),
                     subtitle: Text(
-                      'Use fingerprint or face to sign in',
+                      'Gunakan sidik jari atau wajah untuk masuk',
                       style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                     ),
                     value: _enrollBiometric,
@@ -219,14 +215,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                 color: Colors.white,
                               ),
                             )
-                          : const Text('Create Account'),
+                          : const Text('Buat Akun'),
                     ),
                   ),
                   const SizedBox(height: 12),
 
                   TextButton(
                     onPressed: () => context.go('/login'),
-                    child: const Text('Already have an account? Login'),
+                    child: const Text('Sudah punya akun? Login'),
                   ),
                 ],
               ),

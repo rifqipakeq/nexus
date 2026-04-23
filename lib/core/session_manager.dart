@@ -1,13 +1,11 @@
 import 'dart:async';
 import 'package:flutter/widgets.dart';
 
-/// Tracks user inactivity and triggers auto-logout after a specified duration.
-///
-/// HOW IT WORKS:
-/// 1. Wraps the entire app in a GestureDetector that captures taps/scrolls.
-/// 2. Every user interaction resets a countdown timer.
-/// 3. If no interaction happens for [timeout] (default 10 min), [onTimeout] fires.
-/// 4. The auth layer listens to [onTimeout] and navigates to the login screen.
+/// SESSION MANAGEMENT
+/// 1. Wrap app pada gesture detector untuk capture tap/scroll.
+/// 2. Setiap interaksi user reset timer.
+/// 3. Jika tidak ada interaksi selama timeour, panggil onTimeout.
+/// 4. Layer auth listen ke  onTimeout dan navigasi ke login screen.
 class SessionManager extends StatefulWidget {
   final Widget child;
   final Duration timeout;
@@ -20,7 +18,6 @@ class SessionManager extends StatefulWidget {
     this.timeout = const Duration(minutes: 10),
   });
 
-  /// Allow resetting the timer from anywhere via context.
   static void resetTimer(BuildContext context) {
     context.findAncestorStateOfType<_SessionManagerState>()?._resetTimer();
   }

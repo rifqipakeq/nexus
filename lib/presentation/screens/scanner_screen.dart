@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
-/// QR Scanner screen – scans wallet addresses and returns to the previous screen.
 class ScannerScreen extends StatefulWidget {
   const ScannerScreen({super.key});
 
@@ -29,10 +28,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
     final scannedValue = barcode.rawValue!;
 
-    // Remove "ethereum:" prefix if present
     final address = scannedValue.replaceFirst(RegExp(r'^ethereum:'), '');
 
-    // Return scanned address to previous screen
     Navigator.of(context).pop(address);
   }
 
@@ -70,7 +67,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Text(
-                  'Point camera at a wallet QR code',
+                  'Arahkan kamera ke QR code',
                   style: TextStyle(color: Colors.white),
                 ),
               ),

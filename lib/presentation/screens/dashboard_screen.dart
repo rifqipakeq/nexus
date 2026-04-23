@@ -8,13 +8,6 @@ import '../../core/constants.dart';
 import '../providers.dart';
 import 'package:intl/intl.dart';
 
-/// Main dashboard showing wallet info, prices, and navigation to features.
-///
-/// Key changes for multi-account support:
-/// - Uses UserScopedStorage instead of global LocalDatabaseService
-/// - Displays current user info
-/// - Logout clears all user-scoped state
-/// - Balance polling detects incoming ETH for notifications
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
@@ -24,7 +17,7 @@ class DashboardScreen extends ConsumerStatefulWidget {
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   bool _isLoading = false;
-  bool _isUsd = false; // default IDR
+  bool _isUsd = false; // default rupiah
 
   Timer? _balancePollTimer;
 
@@ -48,13 +41,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       ref.read(ethPriceProvider.notifier).state = prices;
       await storage.cachePrices(prices);
 
-      // Fetch balance if wallet exists
+      // Fetch balance 
       final address = ref.read(walletAddressProvider);
       if (address != null) {
         final blockchain = ref.read(blockchainServiceProvider);
         final balance = await blockchain.getBalance(address);
 
-        // Check for balance changes (incoming ETH detection)
+        // cek perubahan balance untuk notifikasi
         final lastNotified = storage.getLastNotifiedBalance();
         final notifications = ref.read(notificationServiceProvider);
         final notified = await notifications.checkBalanceChange(
@@ -62,7 +55,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           lastNotifiedBalance: lastNotified,
         );
         if (notified) {
-          // Record the received transaction in history
           final received = balance - lastNotified;
           await storage.addTransaction({
             'type': 'received',
@@ -82,7 +74,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         await storage.saveBalance(balance);
       }
     } catch (_) {
-      // Use cached data on error (offline support)
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -123,13 +114,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Wallet Created'),
+        title: const Text('Buat Wallet'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              '⚠️ Save your private key securely!\nIt will not be shown again.',
+              'Simpan kunci pribadi Anda dengan aman!\nKunci ini tidak akan ditampilkan lagi.',
               style: TextStyle(color: Colors.orangeAccent, fontSize: 13),
             ),
             const SizedBox(height: 12),
@@ -150,7 +141,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: wallet['address']!));
                     ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(content: Text('Address copied!')),
+                      const SnackBar(content: Text('Address tercopy!')),
                     );
                   },
                 ),
@@ -176,7 +167,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       ClipboardData(text: wallet['privateKey']!),
                     );
                     ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(content: Text('Private key copied!')),
+                      const SnackBar(content: Text('Private key tercopy!')),
                     );
                   },
                 ),
@@ -187,7 +178,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('I Saved It'),
+            child: const Text('Saya Suadah Menyimpannya'),
           ),
         ],
       ),
@@ -234,7 +225,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: address));
                 ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text('Address copied!')),
+                  const SnackBar(content: Text('Address tercopy!')),
                 );
               },
               icon: const Icon(Icons.copy, size: 16),
@@ -245,7 +236,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close'),
+            child: const Text('Tutup'),
           ),
         ],
       ),
@@ -256,26 +247,23 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     Clipboard.setData(ClipboardData(text: address));
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Wallet address copied to clipboard!'),
+        content: Text('Wallet address tercopy ke clipboard!'),
         duration: Duration(seconds: 2),
       ),
     );
   }
 
   Future<void> _logout() async {
-    // 1. Close user-scoped storage (prevents data leakage)
+    // 1. tutup semua box Hive yang terkait user untuk mencegah data bocor ke user lain saat switch account
     final storage = ref.read(userScopedStorageProvider);
     await storage.closeUserBoxes();
-
-    // 2. Clear blockchain service active user
+    // 2. clear active user di blockchain service untuk mencegah akses ke wallet setelah logout
     final blockchain = ref.read(blockchainServiceProvider);
     blockchain.clearActiveUser();
-
-    // 3. Log out from auth service (clears session in secure storage)
+    // 3. Log out dari auth service 
     final auth = ref.read(authServiceProvider);
     await auth.logout();
-
-    // 4. Reset ALL user-scoped providers to prevent stale data
+    // 4. Reset semua user-scoped providers
     ref.invalidate(currentUserProvider);
     ref.invalidate(walletAddressProvider);
     ref.invalidate(walletBalanceProvider);
@@ -287,8 +275,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     ref.invalidate(totalGamesProvider);
     ref.invalidate(isInSafeZoneProvider);
     ref.invalidate(transactionHistoryProvider);
-
-    // 5. Navigate to login
+    // 5. arahkan ke login
     if (mounted) context.go('/login');
   }
 
@@ -317,7 +304,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('NexusNode Lite'),
+        title: const Text('NexusNode'),
         actions: [
           // Account switcher
           IconButton(
@@ -340,7 +327,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ─── User Info ──────────────────────────────
+              // User Info 
               if (currentUser != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
@@ -360,7 +347,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        'Hello, ${currentUser.username}',
+                        'Halo, ${currentUser.username}',
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
@@ -379,7 +366,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   ),
                 ),
 
-              // ─── Wallet Card ──────────────────────────
+              // Wallet Card 
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
@@ -400,11 +387,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               if (address != null) ...[
-                                // QR Code button
                                 IconButton(
                                   icon: const Icon(Icons.qr_code, size: 22),
                                   onPressed: () => _showQrCode(address),
-                                  tooltip: 'Show QR Code',
+                                  tooltip: 'Tunjukan QR Code',
                                 ),
                               ],
                               // Visibility toggle
@@ -470,7 +456,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '📍 ${isInSafeZone ? "Inside Safe Zone" : "Outside Safe Zone"}',
+                          '📍 ${isInSafeZone ? "Dalam Zona Aman" : "Di Luar Zona Aman"}',
                           style: TextStyle(
                             color: isInSafeZone
                                 ? Colors.greenAccent
@@ -480,7 +466,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ),
                       ] else ...[
                         const SizedBox(height: 12),
-                        const Text('No wallet yet'),
+                        const Text('Belum ada wallet'),
                         const SizedBox(height: 12),
                         ElevatedButton.icon(
                           onPressed: _generateWallet,
@@ -494,19 +480,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
               const SizedBox(height: 16),
 
-              // ─── Price Card ───────────────────────────
+              // Price Card 
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ─── Header + Toggle ─────────────────────
+                      // Header + Toggle
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text(
-                            'ETH Price',
+                            'Harga ETH',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -533,7 +519,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       if (_isLoading)
                         const Center(child: CircularProgressIndicator())
                       else ...[
-                        // ─── USD Row ───────────────────────────
+                        // USD Row 
                         if (_isUsd)
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -549,7 +535,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             ],
                           ),
 
-                        // ─── IDR Row ───────────────────────────
+                        // IDR Row 
                         if (!_isUsd)
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -571,9 +557,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
               const SizedBox(height: 16),
 
-              // ─── Quick Actions ────────────────────────
+              // Quick Actions 
               const Text(
-                'Quick Actions',
+                'Aksi Cepat',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
@@ -587,7 +573,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 children: [
                   _ActionCard(
                     icon: Icons.send,
-                    label: 'Send TX',
+                    label: 'Kirim TX',
                     enabled: isInSafeZone && address != null,
                     onTap: () => context.push('/send'),
                   ),
@@ -620,10 +606,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
               const SizedBox(height: 16),
 
-              // ─── Shake Hint ───────────────────────────
+              // Shake Hint 
               Center(
                 child: Text(
-                  '📱 Shake device to toggle balance visibility',
+                  'Goyangkan ponsel untuk sembunyikan/lihat balance',
                   style: TextStyle(color: Colors.grey[600], fontSize: 12),
                 ),
               ),
@@ -673,7 +659,7 @@ class _ActionCard extends StatelessWidget {
               ),
               if (!enabled)
                 const Text(
-                  '(unavailable)',
+                  '(tidak tersedia)',
                   style: TextStyle(fontSize: 10, color: Colors.grey),
                 ),
             ],

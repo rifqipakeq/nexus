@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers.dart';
 
-/// AI Chatbot screen using Google Gemini API.
-/// Uses user-scoped storage for chat history isolation.
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
 
@@ -81,13 +79,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           IconButton(
             icon: const Icon(Icons.delete_outline),
             onPressed: _clearHistory,
-            tooltip: 'Clear history',
+            tooltip: 'Bersihkan Riwayat',
           ),
         ],
       ),
       body: Column(
         children: [
-          // ─── Messages List ────────────────────────
+          // Messages List 
           Expanded(
             child: chatHistory.isEmpty
                 ? Center(
@@ -101,7 +99,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'Ask me anything about crypto!',
+                          'Tanyakan apa saja tentang kripto!',
                           style: TextStyle(color: Colors.grey[500]),
                         ),
                       ],
@@ -122,7 +120,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   ),
           ),
 
-          // ─── Loading Indicator ────────────────────
+          //  Loading Indicator
           if (isLoading)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -135,14 +133,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   ),
                   SizedBox(width: 8),
                   Text(
-                    'Gemini is thinking...',
+                    'AI sedang mengetik...',
                     style: TextStyle(color: Colors.grey, fontSize: 12),
                   ),
                 ],
               ),
             ),
 
-          // ─── Input Area ───────────────────────────
+          // Input Area 
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -155,7 +153,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   child: TextField(
                     controller: _controller,
                     decoration: const InputDecoration(
-                      hintText: 'Type a message...',
+                      hintText: 'Ketik pesan Anda...',
                       border: InputBorder.none,
                     ),
                     textInputAction: TextInputAction.send,

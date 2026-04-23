@@ -2,12 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive/hive.dart';
 import 'package:uuid/uuid.dart';
-
 import '../models/user_account.dart';
 import 'password_service.dart';
 import 'biometric_auth_service.dart';
 
-/// Result of an authentication operation.
 class AuthResult {
   final bool success;
   final String? error;
@@ -22,17 +20,7 @@ class AuthResult {
       AuthResult(success: true, user: user);
 }
 
-/// Manages the full local authentication lifecycle:
-/// registration, login, logout, account switching, and session persistence.
-///
-/// ## Security Architecture
-/// - Passwords are hashed with PBKDF2-HMAC-SHA256 (100k iterations)
-/// - Per-user random 32-byte salt
-/// - Only hashed passwords are stored (Hive box `accounts`)
-/// - Active session userId is persisted in Flutter Secure Storage
-/// - Biometric keys are hardware-backed (Secure Enclave / StrongBox)
-///
-/// ## Data Flow
+/// FLOW DATA
 /// ```
 /// Register → validate → salt + hash password → create biometric keys
 ///   → store UserAccount in Hive → set active session
@@ -44,13 +32,15 @@ class AuthResult {
 ///
 /// Switch → set new active userId → caller handles data reload
 /// ```
+
 class AuthService {
-  static const String _accountsBoxName = 'accounts';
-  static const String _activeUserKey = 'active_user_id';
+  static const String _accountsBoxName = 'accounts'; // box untuk akun user
+  static const String _activeUserKey =
+      'active_user_id'; // key untuk session aktif di secure storage
 
   final PasswordService _passwordService;
   final BiometricAuthService _biometricService;
-  final FlutterSecureStorage _secureStorage;
+  final FlutterSecureStorage _secureStorage; // session
   final Uuid _uuid;
 
   Box? _accountsBox;
@@ -59,63 +49,59 @@ class AuthService {
     PasswordService? passwordService,
     BiometricAuthService? biometricService,
     FlutterSecureStorage? secureStorage,
-  })  : _passwordService = passwordService ?? PasswordService(),
-        _biometricService = biometricService ?? BiometricAuthService(),
-        _secureStorage = secureStorage ?? const FlutterSecureStorage(),
-        _uuid = const Uuid();
+  }) : _passwordService = passwordService ?? PasswordService(),
+       _biometricService = biometricService ?? BiometricAuthService(),
+       _secureStorage = secureStorage ?? const FlutterSecureStorage(),
+       _uuid = const Uuid();
 
-  /// Initialize the accounts Hive box. Must be called before any operations.
   Future<void> init() async {
     _accountsBox ??= await Hive.openBox(_accountsBoxName);
   }
 
-  /// Ensure the box is open, or throw.
+  /// make sure box sudah di init sebelum akses data
   Box get _box {
     if (_accountsBox == null || !_accountsBox!.isOpen) {
-      throw StateError('AuthService not initialized. Call init() first.');
+      throw StateError('AuthService belum terinisialisasi!');
     }
     return _accountsBox!;
   }
 
-  // ─── Registration ────────────────────────────────────────────────
+  // Registration
+  /// 1. validasi username wajib
+  /// 2. Generates salt
+  /// 3. Hashes password PBKDF2
+  /// 4. optional login biometric
+  /// 5. simpan data akun ke box hive
+  /// 6. session aktif untuk user terkait
 
-  /// Register a new local user account.
-  ///
-  /// 1. Validates username uniqueness (case-insensitive)
-  /// 2. Generates a random salt
-  /// 3. Hashes the password with PBKDF2
-  /// 4. Optionally enrolls biometric keys
-  /// 5. Stores the account in Hive
-  /// 6. Sets this user as the active session
   Future<AuthResult> register({
     required String username,
     required String password,
     bool enrollBiometric = true,
   }) async {
-    // Validate input
     final trimmedUsername = username.trim();
     if (trimmedUsername.isEmpty) {
-      return AuthResult.failure('Username cannot be empty');
+      return AuthResult.failure('Username tidak boleh kosong!');
     }
     if (trimmedUsername.length < 3) {
-      return AuthResult.failure('Username must be at least 3 characters');
+      return AuthResult.failure('Username minimal 3 karakter!');
     }
     if (password.length < 6) {
-      return AuthResult.failure('Password must be at least 6 characters');
+      return AuthResult.failure('Password minimal 6 karakter!');
     }
 
-    // Check uniqueness (case-insensitive)
+    // check username
     final existing = _findUserByUsername(trimmedUsername);
     if (existing != null) {
-      return AuthResult.failure('Username already exists');
+      return AuthResult.failure('Username sudah ada. Buat username lain!');
     }
 
-    // Generate credentials
+    // Generate credentials, salt,hash
     final userId = _uuid.v4();
     final salt = _passwordService.generateSalt();
     final passwordHash = await _passwordService.hashPassword(password, salt);
 
-    // Enroll biometric (optional, fails gracefully)
+    // daftar biometric (opsional)
     String? biometricPublicKey;
     if (enrollBiometric) {
       final availability = await _biometricService.checkAvailability();
@@ -124,7 +110,7 @@ class AuthService {
       }
     }
 
-    // Create account
+    // buat akun
     final account = UserAccount(
       id: userId,
       username: trimmedUsername,
@@ -134,31 +120,31 @@ class AuthService {
       createdAt: DateTime.now().toIso8601String(),
     );
 
-    // Persist
+    // tampan akun ke Hive dan set session aktif
     await _box.put(userId, account.toMap());
     await _setActiveUser(userId);
 
-    debugPrint('User registered: $trimmedUsername ($userId)');
+    debugPrint('Username sukses terdaftar: $trimmedUsername ($userId)');
     return AuthResult.ok(account);
   }
 
-  // ─── Login ───────────────────────────────────────────────────────
-
-  /// Authenticate a user with username and password.
-  ///
-  /// Uses constant-time comparison on the PBKDF2 hash to prevent
-  /// timing attacks that could reveal whether a partial password
-  /// is correct.
+  // Login
+  /// 1. cari username
+  /// 2. jika tidak ada, hash password dengan salt random untuk cegah timing attack
+  /// 3. jika ada, hash password input dengan salt yang disimpan
+  /// 4. jika valid, optional biometric auth untuk keamanan tambahan
+  /// 5. set session aktif untuk user terkait
   Future<AuthResult> login({
     required String username,
     required String password,
   }) async {
     final account = _findUserByUsername(username.trim());
     if (account == null) {
-      // Hash the password anyway to prevent timing-based username enumeration.
-      // This ensures the response time is similar whether the user exists or not.
-      await _passwordService.hashPassword(password, _passwordService.generateSalt());
-      return AuthResult.failure('Invalid username or password');
+      await _passwordService.hashPassword(
+        password,
+        _passwordService.generateSalt(),
+      );
+      return AuthResult.failure('Invalid username atau password');
     }
 
     final isValid = await _passwordService.verifyPassword(
@@ -168,95 +154,93 @@ class AuthService {
     );
 
     if (!isValid) {
-      return AuthResult.failure('Invalid username or password');
+      return AuthResult.failure('Invalid username atau password');
     }
 
     await _setActiveUser(account.id);
-    debugPrint('User logged in: ${account.username}');
+    debugPrint('User loggin: ${account.username}');
     return AuthResult.ok(account);
   }
 
-  /// Authenticate using biometric only (for returning users / session resume).
+  /// Biometric
+  /// 1. Cari akun berdasarkan userId
+  /// 2. Jika akun tidak ditemukan atau tidak memiliki biometric, gagal
+  /// 3. Panggil service biometric untuk autentikasi
+  /// 4. Jika berhasil, set session aktif untuk user terkait
   Future<AuthResult> loginWithBiometric(String userId) async {
     final account = getUserById(userId);
     if (account == null) {
-      return AuthResult.failure('Account not found');
+      return AuthResult.failure('Akun tidak ditemukan');
     }
 
     if (account.biometricPublicKey == null) {
-      return AuthResult.failure('No biometric enrolled for this account');
+      return AuthResult.failure('Tidak ada data biometric untuk akun ini');
     }
 
     final result = await _biometricService.authenticate(userId);
     if (result == null || !result.success) {
-      return AuthResult.failure('Biometric authentication failed');
+      return AuthResult.failure('Autentikasi biometric gagal');
     }
 
     await _setActiveUser(account.id);
     return AuthResult.ok(account);
   }
 
-  // ─── Logout ──────────────────────────────────────────────────────
-
-  /// Log out the current user. Clears the active session.
+  // Logout
   Future<void> logout() async {
     await _secureStorage.delete(key: _activeUserKey);
-    debugPrint('User logged out');
+    debugPrint('User logout');
   }
 
-  // ─── Account Switching ───────────────────────────────────────────
-
-  /// Switch to a different registered account.
-  /// The caller is responsible for reloading user-scoped data.
+  // Ganti akun
+  // 1. Cari akun berdasarkan userId
+  // 2. Jika akun tidak ditemukan, gagal
+  // 3. Jika ditemukan, set session aktif untuk user terkait
   Future<AuthResult> switchAccount(String userId) async {
     final account = getUserById(userId);
     if (account == null) {
-      return AuthResult.failure('Account not found');
+      return AuthResult.failure('Akun tidak ditemukan');
     }
 
     await _setActiveUser(userId);
-    debugPrint('Switched to: ${account.username}');
+    debugPrint('Beralih ke: ${account.username}');
     return AuthResult.ok(account);
   }
 
-  // ─── Session Persistence ─────────────────────────────────────────
-
-  /// Get the currently active user ID from secure storage.
-  /// Returns null if no session exists (user must log in).
+  // Session
+  // 1. Ambil userId aktif dari secure storage
+  // 2. Jika tidak ada, berarti tidak ada session aktif
+  // 3. Jika ada, ambil data akun terkait untuk akses informasi user
   Future<String?> getActiveUserId() async {
     return _secureStorage.read(key: _activeUserKey);
   }
 
-  /// Get the currently active user account, if a session exists.
   Future<UserAccount?> getActiveUser() async {
     final userId = await getActiveUserId();
     if (userId == null) return null;
     return getUserById(userId);
   }
 
-  /// Check if there is an active session.
+  /// cek apa ada session aktif
   Future<bool> hasActiveSession() async {
     final userId = await getActiveUserId();
     return userId != null && getUserById(userId) != null;
   }
 
-  // ─── Account Management ──────────────────────────────────────────
-
-  /// Get all registered accounts.
+  // Manage akun
   List<UserAccount> getAllAccounts() {
     return _box.values
         .map((v) => UserAccount.fromMap(v as Map<dynamic, dynamic>))
         .toList();
   }
 
-  /// Get a specific account by ID.
   UserAccount? getUserById(String userId) {
     final data = _box.get(userId);
     if (data == null) return null;
     return UserAccount.fromMap(data as Map<dynamic, dynamic>);
   }
 
-  /// Update a user's biometric public key (e.g., after re-enrollment).
+  /// update data biometric
   Future<void> updateBiometricKey(String userId, String? publicKey) async {
     final account = getUserById(userId);
     if (account == null) return;
@@ -264,23 +248,22 @@ class AuthService {
     await _box.put(userId, updated.toMap());
   }
 
-  /// Delete a user account and their biometric keys.
+  /// hapus akun, termasuk data biometric dan sesi jika aktif
   Future<void> deleteAccount(String userId) async {
     await _biometricService.deleteKeys(userId);
     await _box.delete(userId);
 
-    // If this was the active user, clear session
+    // jika user aktif, logout untuk clear session
     final activeId = await getActiveUserId();
     if (activeId == userId) {
       await logout();
     }
   }
 
-  /// Check if any accounts exist (for first-launch detection).
+  // cek apakah ada akun yang terdaftar, untuk first launch logic
   bool get hasAccounts => _box.isNotEmpty;
 
-  // ─── Helpers ─────────────────────────────────────────────────────
-
+  // Helpers
   Future<void> _setActiveUser(String userId) async {
     await _secureStorage.write(key: _activeUserKey, value: userId);
   }

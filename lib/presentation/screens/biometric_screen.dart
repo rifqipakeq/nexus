@@ -3,17 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers.dart';
 
-/// Biometric verification screen shown after login.
-///
-/// Uses hardware-backed cryptographic signatures (biometric_signature package)
-/// instead of the boolean-only local_auth. This means:
-/// - The biometric hardware produces a verifiable signature
-/// - An attacker cannot bypass auth by hooking the API return value
-/// - The private signing key never leaves the Secure Enclave / StrongBox
-///
-/// Fallback: If biometrics are unavailable (emulator, no hardware), the user
-/// can proceed directly to the dashboard (they've already authenticated
-/// with username + password).
 class BiometricScreen extends ConsumerStatefulWidget {
   const BiometricScreen({super.key});
 
@@ -42,16 +31,14 @@ class _BiometricScreenState extends ConsumerState<BiometricScreen> {
       final availability = await biometricService.checkAvailability();
 
       if (!availability.isAvailable || !availability.hasEnrolled) {
-        // No biometric hardware or no enrolled biometrics — skip
-        debugPrint('Biometrics unavailable: ${availability.reason}');
+        debugPrint('Fitur Biometrik tidak tersedia: ${availability.reason}');
         await _proceedToDashboard();
         return;
       }
 
-      // Check if the current user has biometric keys enrolled
+      // cek session aktif dan cek user terkait biometric keys
       final currentUser = ref.read(currentUserProvider);
       if (currentUser == null) {
-        // No user in session — try to restore from persisted session
         final auth = ref.read(authServiceProvider);
         final savedUser = await auth.getActiveUser();
         if (savedUser != null) {
@@ -63,21 +50,21 @@ class _BiometricScreenState extends ConsumerState<BiometricScreen> {
               await _proceedToDashboard();
               return;
             }
-            setState(() => _error = 'Biometric verification failed. Try again.');
+            setState(() => _error = 'Verifikasi biometrik gagal. Coba lagi.');
             return;
           }
         }
-        // No biometric keys — use simple prompt
+
         final success = await biometricService.simpleAuthenticate();
         if (success) {
           await _proceedToDashboard();
         } else {
-          setState(() => _error = 'Authentication failed. Try again.');
+          setState(() => _error = 'Autentikasi gagal. Coba lagi.');
         }
         return;
       }
 
-      // User exists — try signature-based auth
+      // jika user sudah login dan punya biometric keys, langsung authenticate
       final hasKeys = await biometricService.hasEnrolledKeys(currentUser.id);
       if (hasKeys) {
         final result = await biometricService.authenticate(currentUser.id);
@@ -85,14 +72,14 @@ class _BiometricScreenState extends ConsumerState<BiometricScreen> {
           await _proceedToDashboard();
           return;
         }
-        setState(() => _error = 'Biometric verification failed. Try again.');
+        setState(() => _error = 'Verifikasi biometrik gagal. Coba lagi.');
       } else {
-        // No keys enrolled for this user — use simple prompt
+        // jika sudah login tapi belum setup biometric, fallback ke simple prompt untuk verifikasi
         final success = await biometricService.simpleAuthenticate();
         if (success) {
           await _proceedToDashboard();
         } else {
-          setState(() => _error = 'Authentication failed. Try again.');
+          setState(() => _error = 'Autentikasi gagal. Coba lagi.');
         }
       }
     } catch (e) {
@@ -105,17 +92,16 @@ class _BiometricScreenState extends ConsumerState<BiometricScreen> {
   Future<void> _proceedToDashboard() async {
     if (!mounted) return;
 
-    // Open user-scoped storage before navigating
+    // Pastikan data user sudah dimuat ke provider sebelum navigasi
     final currentUser = ref.read(currentUserProvider);
     if (currentUser != null) {
       final storage = ref.read(userScopedStorageProvider);
       await storage.openForUser(currentUser.id);
 
-      // Set the active user in blockchain service
+      // Set active user di blockchain service untuk akses data terkait user
       final blockchain = ref.read(blockchainServiceProvider);
       blockchain.setActiveUser(currentUser.id);
 
-      // Load user's data into providers
       _loadUserData(storage);
     }
 
@@ -123,7 +109,6 @@ class _BiometricScreenState extends ConsumerState<BiometricScreen> {
   }
 
   void _loadUserData(dynamic storage) {
-    // Load user-scoped data into providers
     ref.read(walletAddressProvider.notifier).state = storage.getWalletAddress();
     ref.read(walletBalanceProvider.notifier).state = storage.getBalance();
     ref.read(chatHistoryProvider.notifier).state = storage.getChatHistory();
@@ -152,17 +137,17 @@ class _BiometricScreenState extends ConsumerState<BiometricScreen> {
                 ),
                 const SizedBox(height: 24),
                 const Text(
-                  'Biometric Verification',
+                  'Verifikasi Biometrik',
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Verify your identity to continue',
+                  'Verifikasi identitas Anda untuk melanjutkan',
                   style: TextStyle(color: Colors.grey[400]),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Using hardware-backed signature',
+                  'Pastikan Anda sudah mengaktifkan biometrik di pengaturan akun.',
                   style: TextStyle(color: Colors.grey[600], fontSize: 11),
                 ),
                 const SizedBox(height: 32),
@@ -182,12 +167,12 @@ class _BiometricScreenState extends ConsumerState<BiometricScreen> {
                   ElevatedButton.icon(
                     onPressed: _authenticate,
                     icon: const Icon(Icons.fingerprint),
-                    label: const Text('Authenticate'),
+                    label: const Text('Autentikasi Ulang'),
                   ),
                   const SizedBox(height: 12),
                   TextButton(
                     onPressed: () => _proceedToDashboard(),
-                    child: const Text('Skip (password already verified)'),
+                    child: const Text('Skip dan Lanjutkan ke Dashboard'),
                   ),
                 ],
               ],

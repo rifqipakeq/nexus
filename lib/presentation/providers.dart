@@ -13,8 +13,7 @@ import '../data/services/gemini_service.dart';
 import '../data/services/price_service.dart';
 import '../data/local/user_scoped_storage.dart';
 
-// ─── Core Service Providers ─────────────────────────────────────
-
+// Core Service Providers 
 final securityServiceProvider = Provider<SecurityService>((ref) {
   return SecurityService();
 });
@@ -66,23 +65,19 @@ final userScopedStorageProvider = Provider<UserScopedStorage>((ref) {
   return UserScopedStorage();
 });
 
-// ─── Auth State ─────────────────────────────────────────────────
-
-/// The currently authenticated user. Null means no active session.
+// Auth State 
+/// user yang sedang aktif (null jika tidak ada sesi aktif)
 final currentUserProvider = StateProvider<UserAccount?>((ref) => null);
-
-/// Whether the app is in an authenticated state.
 final isAuthenticatedProvider = Provider<bool>((ref) {
   return ref.watch(currentUserProvider) != null;
 });
-
-/// All registered accounts (for account switcher UI).
+/// get list akun
 final allAccountsProvider = Provider<List<UserAccount>>((ref) {
   final auth = ref.read(authServiceProvider);
   return auth.getAllAccounts();
 });
 
-// ─── Wallet State ───────────────────────────────────────────────
+//  Wallet State
 
 final walletAddressProvider = StateProvider<String?>((ref) => null);
 
@@ -90,17 +85,17 @@ final walletBalanceProvider = StateProvider<double>((ref) => 0.0);
 
 final balanceVisibleProvider = StateProvider<bool>((ref) => true);
 
-// ─── Price State ────────────────────────────────────────────────
+// Price State
 
 final ethPriceProvider = StateProvider<Map<String, double>>((ref) {
   return {'usd': 0.0, 'idr': 0.0};
 });
 
-// ─── Location State ─────────────────────────────────────────────
+//  Location State
 
 final isInSafeZoneProvider = StateProvider<bool>((ref) => false);
 
-// ─── Chat State ─────────────────────────────────────────────────
+// Chat State 
 
 final chatHistoryProvider = StateProvider<List<Map<String, String>>>((ref) {
   return [];
@@ -108,7 +103,7 @@ final chatHistoryProvider = StateProvider<List<Map<String, String>>>((ref) {
 
 final chatLoadingProvider = StateProvider<bool>((ref) => false);
 
-// ─── Game State ─────────────────────────────────────────────────
+// Game State
 
 final gameScoreProvider = StateProvider<int>((ref) => 0);
 
@@ -116,7 +111,7 @@ final highScoreProvider = StateProvider<int>((ref) => 0);
 
 final totalGamesProvider = StateProvider<int>((ref) => 0);
 
-// ─── Transaction History State ──────────────────────────────────
+// Transaction History State
 
 final transactionHistoryProvider =
     StateProvider<List<Map<String, String>>>((ref) => []);

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-
 import 'core/theme.dart';
 import 'core/constants.dart';
 import 'core/session_manager.dart';
@@ -16,34 +15,34 @@ import 'presentation/providers.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load environment variables
+  // Load ev
   await dotenv.load(fileName: '.env');
 
-  // Initialize Hive
+  // Inisialisasi Hive
   await Hive.initFlutter();
 
-  // Initialize global storage (prices box)
+  // Inisialisasi price box
   final storage = UserScopedStorage();
   await storage.initGlobal();
 
-  // Initialize the accounts box
+  // Inisialisasi layanan autentikasi
   final auth = AuthService();
   await auth.init();
 
-  // Initialize encryption keys
+  // Inisialisasi enkripsi
   final security = SecurityService();
   await security.ensureEncryptionKeys();
 
-  // Initialize local notifications (no Firebase)
+  // Inisisalisasi notifikasi
   final notifications = NotificationService();
   try {
     await notifications.initialize();
   } catch (e) {
-    debugPrint('Notification init failed: $e');
+    debugPrint('Inisialisasi Notifikasi gagal: $e');
   }
 
-  // Pass pre-initialized instances into Riverpod so providers don't
-  // create separate (uninitialized) objects.
+  // Instance Pre init ke seluruh app
+  // Agar bisa diakses dari mana saja dan ngga perlu init ulang
   runApp(
     ProviderScope(
       overrides: [
@@ -67,7 +66,6 @@ class NexusNodeApp extends ConsumerWidget {
     return SessionManager(
       timeout: AppConstants.inactivityTimeout,
       onTimeout: () {
-        // Auto-logout: navigate to login
         router.go('/login');
       },
       child: MaterialApp.router(

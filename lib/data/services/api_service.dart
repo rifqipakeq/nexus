@@ -1,8 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
-/// Dio HTTP client with logging interceptor.
-/// Used for CoinGecko, Gemini, and Alchemy REST calls.
+// wrapper dio untuk konfigurasi base url, timeout, dan logging
 class ApiService {
   late final Dio dio;
 
@@ -22,7 +21,7 @@ class ApiService {
     dio.interceptors.add(_LoggingInterceptor());
   }
 
-  /// GET request helper.
+  // GET
   Future<Response> get(
     String path, {
     Map<String, dynamic>? queryParameters,
@@ -31,13 +30,13 @@ class ApiService {
     return dio.get(path, queryParameters: queryParameters, options: options);
   }
 
-  /// POST request helper.
+  // POST
   Future<Response> post(String path, {dynamic data, Options? options}) {
     return dio.post(path, data: data, options: options);
   }
 }
 
-/// Logs request/response in debug mode only.
+/// logging data hanya pada debug mode
 class _LoggingInterceptor extends Interceptor {
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {

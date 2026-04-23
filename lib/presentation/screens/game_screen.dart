@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers.dart';
 
-/// Reaction game screen. Uses user-scoped storage for game score isolation.
 class GameScreen extends ConsumerStatefulWidget {
   const GameScreen({super.key});
 
@@ -82,7 +81,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
 
     _difficultyMs = (_difficultyMs * 0.9).clamp(400, 2000).toInt();
 
-    // Save to user-scoped storage
     final storage = ref.read(userScopedStorageProvider);
     await storage.saveGameScore(score);
     await storage.saveHighScore(score);
@@ -151,7 +149,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                       bottom: 20,
                       left: 20,
                       child: Text(
-                        'Speed: ${_difficultyMs}ms',
+                        'Kecepatan: ${_difficultyMs}ms',
                         style: const TextStyle(color: Colors.white70),
                       ),
                     ),

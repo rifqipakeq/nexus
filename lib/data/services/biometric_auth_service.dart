@@ -1,28 +1,16 @@
 import 'package:biometric_signature/biometric_signature.dart';
 import 'package:flutter/foundation.dart';
 
-/// Wraps the `biometric_signature` package to provide hardware-backed
-/// biometric authentication with cryptographic proof.
-///
-/// Key differences from `local_auth`:
-/// - `local_auth` returns a boolean → easily spoofed by API hooking.
-/// - `biometric_signature` produces a cryptographic signature using a
-///   private key stored in hardware (Secure Enclave / StrongBox / TPM).
-///   The signature can be verified against the stored public key.
-///
-/// This service manages per-user biometric key aliases so each account
-/// has its own hardware-backed keypair.
 class BiometricAuthService {
   final BiometricSignature _biometric;
 
   BiometricAuthService({BiometricSignature? biometric})
       : _biometric = biometric ?? BiometricSignature();
 
-  /// Construct a key alias scoped to a specific user.
-  /// Each user gets their own hardware-backed keypair.
+  // helper untuk generate key alias per user
   String _keyAlias(String userId) => 'nexus_user_$userId';
 
-  /// Check if biometric hardware is available on this device.
+  /// Check availability
   Future<BiometricAvailabilityResult> checkAvailability() async {
     try {
       final availability = await _biometric.biometricAuthAvailable();
@@ -35,31 +23,28 @@ class BiometricAuthService {
       return BiometricAvailabilityResult(
         isAvailable: false,
         hasEnrolled: false,
-        reason: 'Error checking biometrics: $e',
+        reason: 'Error saat memeriksa biometrik: $e',
       );
     }
   }
 
-  /// Enroll biometric keys for a user during registration.
-  ///
+  /// Enroll biometric saat registrasi
   /// Generates a hardware-backed ECDSA keypair. The public key is returned
   /// for storage with the user account. The private key never leaves
   /// the secure hardware.
-  ///
-  /// Returns the Base64-encoded public key, or null if enrollment failed.
   Future<String?> enrollBiometric(String userId) async {
     try {
       final result = await _biometric.createKeys(
         keyAlias: _keyAlias(userId),
         keyFormat: KeyFormat.base64,
-        promptMessage: 'Register your biometric for NexusNode',
+        promptMessage: 'Register biometric untuk login',
         config: CreateKeysConfig(
           signatureType: SignatureType.ecdsa,
           enforceBiometric: true,
           setInvalidatedByBiometricEnrollment: true,
           useDeviceCredentials: false,
           enableDecryption: false,
-          failIfExists: false, // Allow re-enrollment
+          failIfExists: false, 
         ),
       );
 
@@ -67,24 +52,15 @@ class BiometricAuthService {
         return result.publicKey;
       }
 
-      debugPrint('Biometric enrollment failed: ${result.code} ${result.error}');
+      debugPrint('Pendaftaran biometric gagal: ${result.code} ${result.error}');
       return null;
     } catch (e) {
-      debugPrint('Biometric enrollment error: $e');
+      debugPrint('Error saat mendaftar biometric: $e');
       return null;
     }
   }
 
-  /// Authenticate a user using their biometric.
-  ///
-  /// Creates a cryptographic signature of a challenge payload using the
-  /// hardware-backed private key. This proves the biometric owner is
-  /// genuinely present — unlike `local_auth` which only returns a boolean.
-  ///
-  /// [userId] - The user to authenticate.
-  /// [challenge] - A unique payload to sign (prevents replay attacks).
-  ///
-  /// Returns the signature result, or null if authentication failed.
+  /// Authenticate user dengan biometric
   Future<BiometricSignatureResult?> authenticate(
     String userId, {
     String? challenge,
@@ -95,7 +71,7 @@ class BiometricAuthService {
       final result = await _biometric.createSignature(
         payload: payload,
         keyAlias: _keyAlias(userId),
-        promptMessage: 'Authenticate to access NexusNode',
+        promptMessage: 'Authenticate dengan biometric',
         signatureFormat: SignatureFormat.base64,
         keyFormat: KeyFormat.base64,
         config: CreateSignatureConfig(
@@ -112,22 +88,21 @@ class BiometricAuthService {
         );
       }
 
-      debugPrint('Biometric auth failed: ${result.code} ${result.error}');
+      debugPrint('Autentikasi biometric gagal: ${result.code} ${result.error}');
       return null;
     } catch (e) {
-      debugPrint('Biometric auth error: $e');
+      debugPrint('Error autentikasi biometric: $e');
       return null;
     }
   }
 
-  /// Simple biometric prompt without cryptographic operations.
-  /// Useful for quick re-authentication (e.g., session resume).
+  /// Simple biometric prompt tanpa signature
   Future<bool> simpleAuthenticate() async {
     try {
       final result = await _biometric.simplePrompt(
-        promptMessage: 'Verify your identity',
+        promptMessage: 'Verifikasi dengan biometric',
         config: SimplePromptConfig(
-          subtitle: 'NexusNode Lite',
+          subtitle: 'NexusNode',
           allowDeviceCredentials: true,
           biometricStrength: BiometricStrength.strong,
         ),
@@ -139,7 +114,7 @@ class BiometricAuthService {
     }
   }
 
-  /// Check if a user has enrolled biometric keys.
+  /// cek apakah user sudah enroll biometric
   Future<bool> hasEnrolledKeys(String userId) async {
     try {
       return await _biometric.biometricKeyExists(
@@ -151,7 +126,7 @@ class BiometricAuthService {
     }
   }
 
-  /// Delete biometric keys for a user (e.g., account deletion).
+  /// hapus key biometric saat user hapus akun
   Future<bool> deleteKeys(String userId) async {
     try {
       return await _biometric.deleteKeys(keyAlias: _keyAlias(userId));
@@ -161,7 +136,7 @@ class BiometricAuthService {
   }
 }
 
-/// Result of a biometric availability check.
+// class result untuk cek availability biometric
 class BiometricAvailabilityResult {
   final bool isAvailable;
   final bool hasEnrolled;
@@ -174,7 +149,7 @@ class BiometricAvailabilityResult {
   });
 }
 
-/// Result of a biometric signature operation.
+/// class result untuk signature biometric, ada signature, public key, dan payload yang ditandatangani
 class BiometricSignatureResult {
   final String signature;
   final String publicKey;

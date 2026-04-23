@@ -1,16 +1,16 @@
-/// Application-wide constants
 class AppConstants {
   AppConstants._();
 
+  // app constant
   static const String appName = 'NexusNode';
   static const Duration inactivityTimeout = Duration(minutes: 10);
   static const Duration priceRefreshInterval = Duration(minutes: 5);
 
-  // Hive box names (global)
+  // Hive box global
   static const String hiveBoxPrices = 'prices';
   static const String hiveBoxAccounts = 'accounts';
 
-  // User-scoped Hive box name helpers
+  // User-scoped hive box
   static String userWalletBox(String userId) => 'user_${userId}_wallet';
   static String userChatBox(String userId) => 'user_${userId}_chat';
   static String userGameBox(String userId) => 'user_${userId}_game';
@@ -27,6 +27,6 @@ class AppConstants {
   // Blockchain
   static const int sepoliaChainId = 11155111;
 
-  // Balance polling interval for notifications
+  // durasi cek balance untuk notif
   static const Duration balancePollInterval = Duration(seconds: 30);
 }

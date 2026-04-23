@@ -2,32 +2,17 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-/// Handles local-only notifications. All Firebase dependencies have been removed.
+/// Method
+/// 1. refresh berkala untuk deteksi wallet balance
+/// 2. bandingkan balance baru dengan balance terakhir yang sudah diberi notifikasi
+/// 3. jika balance naik → notifikasi "Received ETH", jika turun → notifikasi
+/// 
+/// tipe notif
+/// - kirim transaksi: tertrigger saat kirim transaksi
+/// - terima transaksi: terdeteksi via polling balance, muncul sebagai notifikasi lokal
+/// - pengingat inaktivitas: muncul sebelum session timeout
 ///
-/// ## Notification Strategy (No Firebase)
-///
-/// Since we cannot receive push notifications without a server, we use a
-/// **polling-based approach** for balance change detection:
-///
-/// 1. The dashboard periodically refreshes the wallet balance (via timer or pull-to-refresh).
-/// 2. When the balance changes, we compare against the last known balance:
-///    - **Increase** → "Received ETH" notification
-///    - **Decrease** → "Sent ETH" notification (also triggered immediately on send)
-/// 3. Deduplication: We track `lastNotifiedBalance` in Hive to avoid
-///    re-notifying for the same balance value.
-///
-/// ## Notification Types
-/// - **Transaction sent**: Triggered immediately when `sendTransaction` succeeds
-/// - **Balance received**: Detected via polling, shown as local notification
-/// - **Price alert**: Shown when ETH price changes significantly
-/// - **Inactivity reminder**: Shown before session timeout
-///
-/// ## Foreground/Background Handling
-/// - Foreground: Notifications shown via `flutter_local_notifications`
-/// - Background: Without Firebase, notifications only fire while the app process
-///   is alive. This is a known limitation of the no-backend architecture.
 class NotificationService {
-  // Singleton
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
   NotificationService._internal();
@@ -38,15 +23,14 @@ class NotificationService {
   /// Monotonically increasing notification ID to prevent collisions.
   int _nextNotificationId = 100;
 
-  // ─── Initialization ───────────────────────────────────────────
-
+  // init method untuk setup channel dan permission
   Future<void> initialize() async {
-    // Android settings
+    // Android 
     const androidSettings = AndroidInitializationSettings(
-      '@mipmap/ic_launcher',
+      '@mipmap/ic_launcher', // permission android 
     );
 
-    // iOS settings
+    // iOS 
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
@@ -66,9 +50,7 @@ class NotificationService {
     );
   }
 
-  // ─── Transaction Notifications ────────────────────────────────
-
-  /// Show notification when a transaction is sent.
+  // notif kirim
   Future<void> showTransactionSent({
     required double amount,
     required String toAddress,
@@ -79,15 +61,15 @@ class NotificationService {
         : toAddress;
 
     await _show(
-      title: '📤 ETH Sent',
-      body: 'Sent ${amount.toStringAsFixed(6)} ETH to $shortAddress',
+      title: 'ETH Dikirim',
+      body: 'Mengirim ${amount.toStringAsFixed(6)} ETH ke alamat $shortAddress',
       payload: 'tx_sent:$txHash',
       channelId: 'nexus_transactions',
       channelName: 'Transaction Notifications',
     );
   }
 
-  /// Show notification when incoming ETH is detected (via balance polling).
+  /// notif terima
   Future<void> showBalanceReceived({
     required double previousBalance,
     required double newBalance,
@@ -96,52 +78,45 @@ class NotificationService {
     if (received <= 0) return;
 
     await _show(
-      title: '📥 ETH Received',
+      title: 'ETH Diterima',
       body:
-          'Received ${received.toStringAsFixed(6)} ETH\nNew balance: ${newBalance.toStringAsFixed(6)} ETH',
+          'Menerima ${received.toStringAsFixed(6)} ETH\nSaldo baru: ${newBalance.toStringAsFixed(6)} ETH',
       payload: 'balance_received',
       channelId: 'nexus_transactions',
       channelName: 'Transaction Notifications',
     );
   }
 
-  // ─── Price Alerts ─────────────────────────────────────────────
-
-  /// Show price alert notification.
+  // Price alert
   Future<void> showPriceAlert({
     required double oldPrice,
     required double newPrice,
   }) async {
     final percentChange = ((newPrice - oldPrice) / oldPrice * 100)
         .toStringAsFixed(2);
-    final direction = newPrice > oldPrice ? '📈' : '📉';
+    final direction = newPrice > oldPrice ? '📈 ' : '📉 ';
 
     await _show(
       title: '$direction ETH Price Alert',
       body:
-          'ETH price changed by $percentChange% → \$${newPrice.toStringAsFixed(2)}',
+          'Harga ETH berubah  $percentChange% → \$${newPrice.toStringAsFixed(2)}',
       payload: 'price_alert',
       channelId: 'nexus_price_alerts',
       channelName: 'Price Alerts',
     );
   }
 
-  // ─── Inactivity ───────────────────────────────────────────────
-
-  /// Show inactivity reminder.
+  // notif tidak aktif
   Future<void> showInactivityReminder() async {
     await _show(
-      title: '⏰ Inactivity Reminder',
-      body: 'You have been inactive. Your session will expire soon.',
+      title: 'Pengingat Inaktivitas',
+      body: 'Anda tidak aktif. Sesi Anda akan berakhir segera.',
       payload: 'inactivity',
       channelId: 'nexus_session',
       channelName: 'Session Notifications',
     );
   }
 
-  // ─── Generic ──────────────────────────────────────────────────
-
-  /// Show a generic notification.
   Future<void> showNotification({
     required String title,
     required String body,
@@ -156,14 +131,7 @@ class NotificationService {
     );
   }
 
-  // ─── Balance Change Detection ─────────────────────────────────
-
-  /// Check for balance changes and trigger appropriate notifications.
-  ///
-  /// Call this after every balance refresh. It compares the new balance
-  /// with the last notified balance and shows a notification if different.
-  ///
-  /// Returns true if a notification was shown.
+  //  Balance Change Detection
   Future<bool> checkBalanceChange({
     required double currentBalance,
     required double lastNotifiedBalance,
@@ -177,12 +145,10 @@ class NotificationService {
       );
       return true;
     }
-    // Balance decreased — likely outgoing tx, already notified via showTransactionSent
     return false;
   }
 
-  // ─── Internal ─────────────────────────────────────────────────
-
+  // Internal 
   Future<void> _show({
     required String title,
     required String body,
@@ -191,7 +157,7 @@ class NotificationService {
     required String channelName,
   }) async {
     await _localNotifications.show(
-      _nextNotificationId++,
+      _nextNotificationId++, // biar ngga bentrok
       title,
       body,
       NotificationDetails(

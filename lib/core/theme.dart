@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// App-wide theme configuration
 class AppTheme {
   AppTheme._();
 
