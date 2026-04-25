@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/constants.dart';
 import '../providers.dart';
@@ -17,7 +19,11 @@ class DashboardScreen extends ConsumerStatefulWidget {
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   bool _isLoading = false;
-  bool _isUsd = false; // default rupiah
+
+  String _selectedCurrency = 'usd';
+
+  bool _wasVisibleBeforeProximity = true;
+  bool _isProximityNear = false;
 
   Timer? _balancePollTimer;
 
@@ -26,6 +32,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     super.initState();
     _loadData();
     _startMotionDetection();
+    _startProximityDetection();
     _checkSafeZone();
     _startBalancePolling();
   }
@@ -35,7 +42,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     try {
       final storage = ref.read(userScopedStorageProvider);
 
-      // Fetch ETH price
+      // Fetch ETH price (USD, IDR, CNY)
       final priceService = ref.read(priceServiceProvider);
       final prices = await priceService.getEthPrice();
       ref.read(ethPriceProvider.notifier).state = prices;
@@ -47,7 +54,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         final blockchain = ref.read(blockchainServiceProvider);
         final balance = await blockchain.getBalance(address);
 
-        // cek perubahan balance untuk notifikasi
+        // Check for balance changes (incoming ETH detection)
         final lastNotified = storage.getLastNotifiedBalance();
         final notifications = ref.read(notificationServiceProvider);
         final notified = await notifications.checkBalanceChange(
@@ -97,6 +104,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
+  void _startProximityDetection() {
+    final motionService = ref.read(motionServiceProvider);
+    motionService.startProximityListening(
+      onNear: () {
+        if (!_isProximityNear) {
+          _isProximityNear = true;
+          _wasVisibleBeforeProximity = ref.read(balanceVisibleProvider);
+          ref.read(balanceVisibleProvider.notifier).state = false;
+        }
+      },
+      onFar: () {
+        if (_isProximityNear) {
+          _isProximityNear = false;
+          ref.read(balanceVisibleProvider.notifier).state =
+              _wasVisibleBeforeProximity;
+        }
+      },
+    );
+  }
+
   Future<void> _checkSafeZone() async {
     final locationService = ref.read(locationServiceProvider);
     final isInside = await locationService.isInsideSafeZone();
@@ -114,13 +141,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Buat Wallet'),
+        title: const Text('Wallet Generated'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Simpan kunci pribadi Anda dengan aman!\nKunci ini tidak akan ditampilkan lagi.',
+              'Simpan private key anada!\n',
               style: TextStyle(color: Colors.orangeAccent, fontSize: 13),
             ),
             const SizedBox(height: 12),
@@ -178,7 +205,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Saya Suadah Menyimpannya'),
+            child: const Text('Saya sudah simpan'),
           ),
         ],
       ),
@@ -247,23 +274,50 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     Clipboard.setData(ClipboardData(text: address));
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Wallet address tercopy ke clipboard!'),
+        content: Text('Address tercopy!'),
         duration: Duration(seconds: 2),
       ),
     );
   }
 
+  /// Profile image
+  Future<void> _pickAvatar() async {
+    final currentUser = ref.read(currentUserProvider);
+    if (currentUser == null) return;
+
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 256,
+      maxHeight: 256,
+      imageQuality: 75,
+    );
+    if (picked == null) return;
+
+    final bytes = await picked.readAsBytes();
+    final base64Img = base64Encode(bytes);
+
+    final auth = ref.read(authServiceProvider);
+    final updated = await auth.updateAvatar(currentUser.id, base64Img);
+    if (updated != null) {
+      ref.read(currentUserProvider.notifier).state = updated;
+    }
+  }
+
   Future<void> _logout() async {
-    // 1. tutup semua box Hive yang terkait user untuk mencegah data bocor ke user lain saat switch account
+    // 1. Close user-scoped storage (prevents data leakage)
     final storage = ref.read(userScopedStorageProvider);
     await storage.closeUserBoxes();
-    // 2. clear active user di blockchain service untuk mencegah akses ke wallet setelah logout
+
+    // 2. Clear blockchain service active user
     final blockchain = ref.read(blockchainServiceProvider);
     blockchain.clearActiveUser();
-    // 3. Log out dari auth service
+
+    // 3. Log out from auth service (clears session in secure storage)
     final auth = ref.read(authServiceProvider);
     await auth.logout();
-    // 4. Reset semua user-scoped providers
+
+    // 4. Reset ALL user-scoped providers to prevent stale data
     ref.invalidate(currentUserProvider);
     ref.invalidate(walletAddressProvider);
     ref.invalidate(walletBalanceProvider);
@@ -275,14 +329,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     ref.invalidate(totalGamesProvider);
     ref.invalidate(isInSafeZoneProvider);
     ref.invalidate(transactionHistoryProvider);
-    // 5. arahkan ke login
+
+    // 5. Navigate to login
     if (mounted) context.go('/login');
   }
 
   @override
   void dispose() {
     _balancePollTimer?.cancel();
-    ref.read(motionServiceProvider).stopListening();
+    ref.read(motionServiceProvider).stopAll();
     super.dispose();
   }
 
@@ -297,10 +352,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     final ethUsd = prices['usd'] ?? 0.0;
     final ethIdr = prices['idr'] ?? 0.0;
+    final ethCny = prices['cny'] ?? 0.0;
     final balanceUsd = balance * ethUsd;
 
     final idrFormatter = NumberFormat('#,##0', 'id_ID');
     final usdFormatter = NumberFormat('#,##0.00', 'en_US');
+    final cnyFormatter = NumberFormat('#,##0.00', 'zh_CN');
+
+    ImageProvider? avatarImage;
+    if (currentUser?.avatarBase64 != null &&
+        currentUser!.avatarBase64!.isNotEmpty) {
+      try {
+        avatarImage = MemoryImage(base64Decode(currentUser.avatarBase64!));
+      } catch (_) {
+        avatarImage = null;
+      }
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -311,11 +378,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ),
         title: const Text('Nexus'),
         actions: [
-          // Account switcher
           IconButton(
             icon: const Icon(Icons.people_outline),
             onPressed: () => context.push('/accounts'),
-            tooltip: 'Switch Account',
+            tooltip: 'Ganti akun',
           ),
           IconButton(
             icon: const Icon(Icons.reviews_outlined),
@@ -338,35 +404,59 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Row(
                     children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: const Color(0xFF6C63FF),
-                        child: Text(
-                          currentUser.username[0].toUpperCase(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
+                      GestureDetector(
+                        onTap: _pickAvatar,
+                        child: CircleAvatar(
+                          radius: 22,
+                          backgroundColor: const Color(0xFF6C63FF),
+                          backgroundImage: avatarImage,
+                          child: avatarImage == null
+                              ? Text(
+                                  currentUser.username[0].toUpperCase(),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
+                                  ),
+                                )
+                              : null,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Halo, ${currentUser.username}',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  'Halo, ${currentUser.username}',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                if (currentUser.biometricPublicKey != null)
+                                  const Padding(
+                                    padding: EdgeInsets.only(left: 4),
+                                    child: Icon(
+                                      Icons.verified_user,
+                                      size: 16,
+                                      color: Colors.greenAccent,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            Text(
+                              'Ketuk avatar untuk mengubah foto',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      if (currentUser.biometricPublicKey != null)
-                        const Padding(
-                          padding: EdgeInsets.only(left: 4),
-                          child: Icon(
-                            Icons.verified_user,
-                            size: 16,
-                            color: Colors.greenAccent,
-                          ),
-                        ),
                     ],
                   ),
                 ),
@@ -391,14 +481,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              if (address != null) ...[
+                              if (address != null)
                                 IconButton(
                                   icon: const Icon(Icons.qr_code, size: 22),
                                   onPressed: () => _showQrCode(address),
-                                  tooltip: 'Tunjukan QR Code',
+                                  tooltip: 'Show QR Code',
                                 ),
-                              ],
-                              // Visibility toggle
                               IconButton(
                                 icon: Icon(
                                   balanceVisible
@@ -460,7 +548,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '📍 ${isInSafeZone ? "Dalam Zona Aman" : "Di Luar Zona Aman"}',
+                          '📍 ${isInSafeZone ? "Di Dalam Zona Aman" : "Di Luar Zona Aman"}',
                           style: TextStyle(
                             color: isInSafeZone
                                 ? Colors.greenAccent
@@ -484,14 +572,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Price Card
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Header + Toggle
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -502,59 +588,61 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          IconButton(
-                            onPressed: () {
-                              setState(() {
-                                _isUsd = !_isUsd;
-                              });
-                            },
-                            icon: Icon(
-                              _isUsd
-                                  ? Icons.attach_money
-                                  : Icons.currency_exchange,
+                          // Currency dropdown 
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 2,
                             ),
-                            tooltip: 'Switch Currency',
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.grey[700]!),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: _selectedCurrency,
+                                isDense: true,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: 'usd',
+                                    child: Text('USD'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'idr',
+                                    child: Text('IDR'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'cny',
+                                    child: Text('CNY'),
+                                  ),
+                                ],
+                                onChanged: (v) {
+                                  if (v != null) {
+                                    setState(() => _selectedCurrency = v);
+                                  }
+                                },
+                              ),
+                            ),
                           ),
                         ],
                       ),
-
-                      const SizedBox(height: 8),
-
+                      const SizedBox(height: 12),
                       if (_isLoading)
                         const Center(child: CircularProgressIndicator())
-                      else ...[
-                        // USD Row
-                        if (_isUsd)
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text('USD'),
-                              Text(
-                                '\$${usdFormatter.format(ethUsd)}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
-                                ),
-                              ),
-                            ],
-                          ),
-
-                        // IDR Row
-                        if (!_isUsd)
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text('IDR'),
-                              Text(
-                                'Rp ${idrFormatter.format(ethIdr)}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
-                                ),
-                              ),
-                            ],
-                          ),
-                      ],
+                      else
+                        _buildPriceRow(
+                          currency: _selectedCurrency,
+                          ethUsd: ethUsd,
+                          ethIdr: ethIdr,
+                          ethCny: ethCny,
+                          usdFormatter: usdFormatter,
+                          idrFormatter: idrFormatter,
+                          cnyFormatter: cnyFormatter,
+                        ),
                     ],
                   ),
                 ),
@@ -562,11 +650,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               const SizedBox(height: 16),
 
               // Quick Actions
-              // const Text(
-              //   'Fitur',
-              //   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              // ),
-              // const SizedBox(height: 12),
               GridView.count(
                 crossAxisCount: 2,
                 shrinkWrap: true,
@@ -577,18 +660,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 children: [
                   _ActionCard(
                     icon: Icons.send,
-                    label: 'Kirim TX',
+                    label: 'Transfer',
                     enabled: isInSafeZone && address != null,
                     onTap: () => context.push('/send'),
                   ),
-                  // _ActionCard(
-                  //   icon: Icons.qr_code_scanner,
-                  //   label: 'Scan QR',
-                  //   onTap: () => context.push('/scanner'),
-                  // ),
                   _ActionCard(
                     icon: Icons.smart_toy,
-                    label: 'AI Chat',
+                    label: 'Chatbot',
                     onTap: () => context.push('/chat'),
                   ),
                   _ActionCard(
@@ -601,26 +679,70 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     label: 'Riwayat',
                     onTap: () => context.push('/history'),
                   ),
-                  // _ActionCard(
-                  //   icon: Icons.location_on,
-                  //   label: 'Safe Zone',
-                  //   onTap: _checkSafeZone,
-                  // ),
                 ],
               ),
               const SizedBox(height: 16),
 
-              // Shake Hint
+              // Sensor hints
               Center(
-                child: Text(
-                  'Goyangkan ponsel untuk sembunyikan/lihat balance',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                child: Column(
+                  children: [
+                    Text(
+                      'Goyangkan device untuk mengalihkan visibilitas saldo',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Tutup sensor jarak untuk menyembunyikan saldo',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildPriceRow({
+    required String currency,
+    required double ethUsd,
+    required double ethIdr,
+    required double ethCny,
+    required NumberFormat usdFormatter,
+    required NumberFormat idrFormatter,
+    required NumberFormat cnyFormatter,
+  }) {
+    String label;
+    String formattedPrice;
+
+    switch (currency) {
+      case 'idr':
+        label = 'Rupiah';
+        formattedPrice = 'Rp ${idrFormatter.format(ethIdr)}';
+        break;
+      case 'cny':
+        label = 'Yuan';
+        formattedPrice = '¥ ${cnyFormatter.format(ethCny)}';
+        break;
+      case 'usd':
+      default:
+        label = 'Dollar';
+        formattedPrice = '\$${usdFormatter.format(ethUsd)}';
+        break;
+    }
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label),
+        Text(
+          formattedPrice,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+      ],
     );
   }
 }
@@ -663,7 +785,7 @@ class _ActionCard extends StatelessWidget {
               ),
               if (!enabled)
                 const Text(
-                  '(tidak tersedia)',
+                  '(unavailable)',
                   style: TextStyle(fontSize: 10, color: Colors.grey),
                 ),
             ],

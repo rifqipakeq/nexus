@@ -3,116 +3,217 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../providers.dart';
 
-class HistoryScreen extends ConsumerWidget {
+class HistoryScreen extends ConsumerStatefulWidget {
   const HistoryScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HistoryScreen> createState() => _HistoryScreenState();
+}
+
+class _HistoryScreenState extends ConsumerState<HistoryScreen> {
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<Map<String, String>> _filterHistory(List<Map<String, String>> history) {
+    if (_query.isEmpty) return history;
+    final q = _query.toLowerCase();
+    return history.where((tx) {
+      final from = (tx['from'] ?? '').toLowerCase();
+      final to = (tx['to'] ?? '').toLowerCase();
+      final hash = (tx['hash'] ?? '').toLowerCase();
+      return from.contains(q) || to.contains(q) || hash.contains(q);
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final address = ref.watch(walletAddressProvider);
     final history = ref.watch(transactionHistoryProvider);
 
     if (address == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Riwayat Transaksi')),
-        body: const Center(child: Text('Tidak ada dompet yang dibuat.')),
+        body: const Center(child: Text('Tidak ada wallet terdaftar.')),
       );
     }
 
-    if (history.isEmpty) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Riwayat Transaksi')),
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.receipt_long, size: 64, color: Colors.grey[700]),
-              const SizedBox(height: 16),
-              Text(
-                'Belum ada transaksi',
-                style: TextStyle(color: Colors.grey[500], fontSize: 16),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Kirim atau terima ETH untuk melihat riwayat Anda.',
-                style: TextStyle(color: Colors.grey[600], fontSize: 13),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+    final filtered = _filterHistory(history);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Riwayat Transaksi'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.delete_outline),
-            onPressed: () => _clearHistory(context, ref),
-            tooltip: 'Clear history',
-          ),
+          if (history.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () => _clearHistory(context),
+              tooltip: 'Bersihkan Riwayat',
+            ),
         ],
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: history.length,
-        itemBuilder: (context, index) {
-          final tx = history[index];
-          final isSent = tx['type'] == 'sent';
-
-          return Card(
-            margin: const EdgeInsets.only(bottom: 12),
-            child: ListTile(
-              leading: CircleAvatar(
-                backgroundColor: isSent
-                    ? Colors.red.withValues(alpha: 0.2)
-                    : Colors.green.withValues(alpha: 0.2),
-                child: Icon(
-                  isSent ? Icons.arrow_upward : Icons.arrow_downward,
-                  color: isSent ? Colors.redAccent : Colors.greenAccent,
+      body: Column(
+        children: [
+          // Search Bar 
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: TextField(
+              controller: _searchController,
+              onChanged: (v) => setState(() => _query = v.trim()),
+              decoration: InputDecoration(
+                hintText: 'Cari berdasarkan alamat atau hash tx...',
+                prefixIcon: const Icon(Icons.search, size: 20),
+                suffixIcon: _query.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 18),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _query = '');
+                        },
+                      )
+                    : null,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey[700]!),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey[700]!),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFF6C63FF)),
                 ),
               ),
-              title: Text(
-                isSent ? 'Sent' : 'Received',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    tx['value'] ?? '0 ETH',
-                    style: const TextStyle(fontSize: 16),
-                  ),
-                  if (isSent && tx['to'] != null)
-                    Text(
-                      'To: ${_shortAddress(tx['to']!)}',
-                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
-                    ),
-                  if (!isSent && tx['from'] != null)
-                    Text(
-                      'From: ${tx['from'] == 'External' ? 'External' : _shortAddress(tx['from']!)}',
-                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
-                    ),
-                  Text(
-                    '${_formatDate(tx['date'])} • ${tx['status'] ?? 'unknown'}',
-                    style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                  ),
-                  if (tx['hash'] != null)
-                    Text(
-                      'TX: ${_shortHash(tx['hash']!)}',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 11),
-                    ),
-                ],
-              ),
-              isThreeLine: true,
             ),
-          );
-        },
+          ),
+
+          // Results 
+          Expanded(
+            child: filtered.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _query.isNotEmpty
+                              ? Icons.search_off
+                              : Icons.receipt_long,
+                          size: 64,
+                          color: Colors.grey[700],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          _query.isNotEmpty
+                              ? 'Data tidak ditemukan untuk "$_query"'
+                              : 'Tidak ada transaksi',
+                          style: TextStyle(
+                            color: Colors.grey[500],
+                            fontSize: 16,
+                          ),
+                        ),
+                        if (_query.isEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Kirim atau terima ETH untuk melihat riwayat Anda.',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: filtered.length,
+                    itemBuilder: (context, index) {
+                      final tx = filtered[index];
+                      final isSent = tx['type'] == 'sent';
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: isSent
+                                ? Colors.red.withValues(alpha: 0.2)
+                                : Colors.green.withValues(alpha: 0.2),
+                            child: Icon(
+                              isSent
+                                  ? Icons.arrow_upward
+                                  : Icons.arrow_downward,
+                              color: isSent
+                                  ? Colors.redAccent
+                                  : Colors.greenAccent,
+                            ),
+                          ),
+                          title: Text(
+                            isSent ? 'Dikirim' : 'Diterima',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                tx['value'] ?? '0 ETH',
+                                style: const TextStyle(fontSize: 16),
+                              ),
+                              if (isSent && tx['to'] != null)
+                                Text(
+                                  'To: ${_shortAddress(tx['to']!)}',
+                                  style: TextStyle(
+                                    color: Colors.grey[400],
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              if (!isSent && tx['from'] != null)
+                                Text(
+                                  'From: ${tx['from'] == 'External' ? 'External' : _shortAddress(tx['from']!)}',
+                                  style: TextStyle(
+                                    color: Colors.grey[400],
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              Text(
+                                '${_formatDate(tx['date'])} • ${tx['status'] ?? 'unknown'}',
+                                style: TextStyle(
+                                  color: Colors.grey[500],
+                                  fontSize: 12,
+                                ),
+                              ),
+                              if (tx['hash'] != null)
+                                Text(
+                                  'TX: ${_shortHash(tx['hash']!)}',
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 11,
+                                  ),
+                                ),
+                            ],
+                          ),
+                          isThreeLine: true,
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
       ),
     );
   }
 
-  Future<void> _clearHistory(BuildContext context, WidgetRef ref) async {
+  Future<void> _clearHistory(BuildContext context) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(

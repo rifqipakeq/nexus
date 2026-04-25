@@ -248,6 +248,15 @@ class AuthService {
     await _box.put(userId, updated.toMap());
   }
 
+  /// Update user profile
+  Future<UserAccount?> updateAvatar(String userId, String base64Image) async {
+    final account = getUserById(userId);
+    if (account == null) return null;
+    final updated = account.copyWith(avatarBase64: base64Image);
+    await _box.put(userId, updated.toMap());
+    return updated;
+  }
+
   /// hapus akun, termasuk data biometric dan sesi jika aktif
   Future<void> deleteAccount(String userId) async {
     await _biometricService.deleteKeys(userId);

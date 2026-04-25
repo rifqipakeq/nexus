@@ -92,11 +92,12 @@ class UserScopedStorage {
     }
   }
 
-  // Price global var, idr & usd
+  // Price global var, idr, usd, cny
   // pakai cache untuk mengurangi loading dan offline support
   Future<void> cachePrices(Map<String, double> prices) async {
     await pricesBox.put('eth_usd', prices['usd']);
     await pricesBox.put('eth_idr', prices['idr']);
+    await pricesBox.put('eth_cny', prices['cny']);
     await pricesBox.put('last_updated', DateTime.now().toIso8601String());
   }
 
@@ -104,6 +105,7 @@ class UserScopedStorage {
     return {
       'usd': (pricesBox.get('eth_usd', defaultValue: 0.0) as num).toDouble(),
       'idr': (pricesBox.get('eth_idr', defaultValue: 0.0) as num).toDouble(),
+      'cny': (pricesBox.get('eth_cny', defaultValue: 0.0) as num).toDouble(),
     };
   }
 

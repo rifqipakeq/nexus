@@ -88,7 +88,7 @@ final balanceVisibleProvider = StateProvider<bool>((ref) => true);
 // Price State
 
 final ethPriceProvider = StateProvider<Map<String, double>>((ref) {
-  return {'usd': 0.0, 'idr': 0.0};
+  return {'usd': 0.0, 'idr': 0.0, 'cny': 0.0};
 });
 
 //  Location State
@@ -112,6 +112,5 @@ final highScoreProvider = StateProvider<int>((ref) => 0);
 final totalGamesProvider = StateProvider<int>((ref) => 0);
 
 // Transaction History State
-
 final transactionHistoryProvider =
     StateProvider<List<Map<String, String>>>((ref) => []);

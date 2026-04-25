@@ -178,10 +178,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
 
                   // Account switcher link
-                  TextButton(
-                    onPressed: () => context.push('/accounts'),
-                    child: const Text('Ganti akun'),
-                  ),
+                  // TextButton(
+                  //   onPressed: () => context.push('/accounts'),
+                  //   child: const Text('Ganti akun'),
+                  // ),
                 ],
               ),
             ),
