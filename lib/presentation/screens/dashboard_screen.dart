@@ -41,7 +41,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       ref.read(ethPriceProvider.notifier).state = prices;
       await storage.cachePrices(prices);
 
-      // Fetch balance 
+      // Fetch balance
       final address = ref.read(walletAddressProvider);
       if (address != null) {
         final blockchain = ref.read(blockchainServiceProvider);
@@ -260,7 +260,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     // 2. clear active user di blockchain service untuk mencegah akses ke wallet setelah logout
     final blockchain = ref.read(blockchainServiceProvider);
     blockchain.clearActiveUser();
-    // 3. Log out dari auth service 
+    // 3. Log out dari auth service
     final auth = ref.read(authServiceProvider);
     await auth.logout();
     // 4. Reset semua user-scoped providers
@@ -304,7 +304,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('NexusNode'),
+        leading: IconButton(
+          icon: const Icon(Icons.logout),
+          onPressed: _logout,
+          tooltip: 'Logout',
+        ),
+        title: const Text('Nexus'),
         actions: [
           // Account switcher
           IconButton(
@@ -313,9 +318,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             tooltip: 'Switch Account',
           ),
           IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _logout,
-            tooltip: 'Logout',
+            icon: const Icon(Icons.reviews_outlined),
+            onPressed: () => context.push('/review'),
+            tooltip: 'Review',
           ),
         ],
       ),
@@ -327,7 +332,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // User Info 
+              // User Info
               if (currentUser != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
@@ -366,7 +371,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   ),
                 ),
 
-              // Wallet Card 
+              // Wallet Card
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
@@ -412,7 +417,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ],
                       ),
                       if (address != null) ...[
-                        // Tappable address with copy
                         GestureDetector(
                           onTap: () => _copyAddress(address),
                           child: Row(
@@ -480,7 +484,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Price Card 
+              // Price Card
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
@@ -519,7 +523,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       if (_isLoading)
                         const Center(child: CircularProgressIndicator())
                       else ...[
-                        // USD Row 
+                        // USD Row
                         if (_isUsd)
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -535,7 +539,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             ],
                           ),
 
-                        // IDR Row 
+                        // IDR Row
                         if (!_isUsd)
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -557,12 +561,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Quick Actions 
-              const Text(
-                'Aksi Cepat',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
+              // Quick Actions
+              // const Text(
+              //   'Fitur',
+              //   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              // ),
+              // const SizedBox(height: 12),
               GridView.count(
                 crossAxisCount: 2,
                 shrinkWrap: true,
@@ -577,11 +581,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     enabled: isInSafeZone && address != null,
                     onTap: () => context.push('/send'),
                   ),
-                  _ActionCard(
-                    icon: Icons.qr_code_scanner,
-                    label: 'Scan QR',
-                    onTap: () => context.push('/scanner'),
-                  ),
+                  // _ActionCard(
+                  //   icon: Icons.qr_code_scanner,
+                  //   label: 'Scan QR',
+                  //   onTap: () => context.push('/scanner'),
+                  // ),
                   _ActionCard(
                     icon: Icons.smart_toy,
                     label: 'AI Chat',
@@ -597,16 +601,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     label: 'Riwayat',
                     onTap: () => context.push('/history'),
                   ),
-                  _ActionCard(
-                    icon: Icons.location_on,
-                    label: 'Safe Zone',
-                    onTap: _checkSafeZone,
-                  ),
+                  // _ActionCard(
+                  //   icon: Icons.location_on,
+                  //   label: 'Safe Zone',
+                  //   onTap: _checkSafeZone,
+                  // ),
                 ],
               ),
               const SizedBox(height: 16),
 
-              // Shake Hint 
+              // Shake Hint
               Center(
                 child: Text(
                   'Goyangkan ponsel untuk sembunyikan/lihat balance',
