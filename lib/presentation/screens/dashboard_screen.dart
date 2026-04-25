@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/constants.dart';
+import '../../data/services/timezone_service.dart';
 import '../providers.dart';
 import 'package:intl/intl.dart';
 
@@ -21,6 +22,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   Timer? _balancePollTimer;
 
+  // WORLD CLOCK
+  Timer? _clockTimer;
+  String _selectedZone = "Asia/Jakarta";
+
+  final List<String> _zones = [
+    "Asia/Jakarta",
+    "Asia/Tokyo",
+    "Europe/London",
+    "America/New_York",
+    "Australia/Sydney",
+    "Asia/Dubai",
+  ];
+
+  DateTime _currentTime = DateTime.now();
+
   @override
   void initState() {
     super.initState();
@@ -28,6 +44,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     _startMotionDetection();
     _checkSafeZone();
     _startBalancePolling();
+    _startClock();
   }
 
   Future<void> _loadData() async {
@@ -41,7 +58,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       ref.read(ethPriceProvider.notifier).state = prices;
       await storage.cachePrices(prices);
 
-      // Fetch balance 
+      // Fetch balance
       final address = ref.read(walletAddressProvider);
       if (address != null) {
         final blockchain = ref.read(blockchainServiceProvider);
@@ -101,6 +118,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final locationService = ref.read(locationServiceProvider);
     final isInside = await locationService.isInsideSafeZone();
     ref.read(isInSafeZoneProvider.notifier).state = isInside;
+  }
+
+  void _startClock() {
+    _currentTime = TimezoneService.getTime(_selectedZone);
+
+    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() {
+          _currentTime = TimezoneService.getTime(_selectedZone);
+        });
+      }
+    });
   }
 
   Future<void> _generateWallet() async {
@@ -260,7 +289,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     // 2. clear active user di blockchain service untuk mencegah akses ke wallet setelah logout
     final blockchain = ref.read(blockchainServiceProvider);
     blockchain.clearActiveUser();
-    // 3. Log out dari auth service 
+    // 3. Log out dari auth service
     final auth = ref.read(authServiceProvider);
     await auth.logout();
     // 4. Reset semua user-scoped providers
@@ -281,6 +310,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   @override
   void dispose() {
+    _clockTimer?.cancel();
     _balancePollTimer?.cancel();
     ref.read(motionServiceProvider).stopListening();
     super.dispose();
@@ -327,46 +357,95 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // User Info 
+              // User Info
+              // User Info
               if (currentUser != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: const Color(0xFF6C63FF),
-                        child: Text(
-                          currentUser.username[0].toUpperCase(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
+                      /// KIRI = USER
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 16,
+                            backgroundColor: const Color(0xFF6C63FF),
+                            child: Text(
+                              currentUser.username[0].toUpperCase(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Halo, ${currentUser.username}',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      if (currentUser.biometricPublicKey != null)
-                        const Padding(
-                          padding: EdgeInsets.only(left: 4),
-                          child: Icon(
-                            Icons.verified_user,
-                            size: 16,
-                            color: Colors.greenAccent,
+
+                          const SizedBox(width: 8),
+
+                          Text(
+                            'Halo, ${currentUser.username}',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
-                        ),
+
+                          if (currentUser.biometricPublicKey != null)
+                            const Padding(
+                              padding: EdgeInsets.only(left: 4),
+                              child: Icon(
+                                Icons.verified_user,
+                                size: 16,
+                                color: Colors.greenAccent,
+                              ),
+                            ),
+                        ],
+                      ),
+
+                      /// KANAN = JAM DUNIA
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          DropdownButton<String>(
+                            value: _selectedZone,
+                            dropdownColor: Colors.black87,
+                            underline: const SizedBox(),
+                            iconEnabledColor: Colors.white,
+                            style: const TextStyle(color: Colors.white),
+
+                            items: _zones.map((zone) {
+                              return DropdownMenuItem(
+                                value: zone,
+                                child: Text(TimezoneService.getCity(zone)),
+                              );
+                            }).toList(),
+
+                            onChanged: (value) {
+                              setState(() {
+                                _selectedZone = value!;
+                                _currentTime = TimezoneService.getTime(
+                                  _selectedZone,
+                                );
+                              });
+                            },
+                          ),
+
+                          Text(
+                            DateFormat('HH:mm:ss').format(_currentTime),
+                            style: const TextStyle(
+                              color: Colors.cyanAccent,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
 
-              // Wallet Card 
+              // Wallet Card
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
@@ -480,7 +559,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Price Card 
+              // Price Card
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
@@ -519,7 +598,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       if (_isLoading)
                         const Center(child: CircularProgressIndicator())
                       else ...[
-                        // USD Row 
+                        // USD Row
                         if (_isUsd)
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -535,7 +614,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             ],
                           ),
 
-                        // IDR Row 
+                        // IDR Row
                         if (!_isUsd)
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -557,11 +636,33 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Quick Actions 
-              const Text(
-                'Aksi Cepat',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
+              // Quick Actions
+// Quick Actions
+Row(
+  children: [
+
+    const Expanded(
+      child: Text(
+        'Aksi Cepat',
+        style: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    ),
+
+    IconButton(
+      icon: const Icon(
+        Icons.info_outline,
+        color: Colors.cyanAccent,
+      ),
+      tooltip: 'Kesan & Saran TPM',
+      onPressed: () {
+        context.push('/kesan-pesan');
+      },
+    ),
+  ],
+),
               const SizedBox(height: 12),
               GridView.count(
                 crossAxisCount: 2,
@@ -606,7 +707,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Shake Hint 
+              // Shake Hint
               Center(
                 child: Text(
                   'Goyangkan ponsel untuk sembunyikan/lihat balance',

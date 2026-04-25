@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../presentation/screens/kesan_pesan.dart';
 import '../presentation/screens/login_screen.dart';
 import '../presentation/screens/register_screen.dart';
 import '../presentation/screens/biometric_screen.dart';
@@ -48,6 +49,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/accounts',
         builder: (context, state) => const AccountSwitcherScreen(),
       ),
+      GoRoute(
+  path: '/kesan-pesan',
+  builder: (context, state) =>
+      const KesanPesanScreen(),
+),
     ],
     errorBuilder: (context, state) =>
         Scaffold(body: Center(child: Text('Halaman tidak ditemukan: ${state.uri}'))),

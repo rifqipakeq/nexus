@@ -11,12 +11,15 @@ import 'data/services/security_service.dart';
 import 'data/services/auth_service.dart';
 import 'data/services/notification_service.dart';
 import 'presentation/providers.dart';
+import 'data/services/timezone_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Load ev
   await dotenv.load(fileName: '.env');
+
+  await TimezoneService.init();
 
   // Inisialisasi Hive
   await Hive.initFlutter();
