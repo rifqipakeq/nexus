@@ -204,6 +204,9 @@ class UserScopedStorage {
 
   Future<void> saveSafeZones(List<Map<String, dynamic>> zones) async {
     await walletBox.put(AppConstants.userSafeZonesKey, zones);
+    if (zones.isNotEmpty) {
+      await walletBox.put(AppConstants.userHasConfiguredZonesKey, true);
+    }
   }
 
   List<Map<String, dynamic>> getSafeZones() {
@@ -218,6 +221,13 @@ class UserScopedStorage {
 
   Future<void> clearSafeZones() async {
     await walletBox.put(AppConstants.userSafeZonesKey, <dynamic>[]);
+  }
+
+  bool getHasConfiguredZones() {
+    return walletBox.get(
+          AppConstants.userHasConfiguredZonesKey,
+          defaultValue: false,
+        ) as bool;
   }
 
   Future<void> saveSelectedTimezone(String tzName) async {

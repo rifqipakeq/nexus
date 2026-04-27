@@ -27,7 +27,7 @@ class AccountSwitcherScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton(
-                    onPressed: () => context.go('/register'),
+                    onPressed: () => context.push('/register'),
                     child: const Text('Buat Akun'),
                   ),
                 ],
@@ -41,7 +41,7 @@ class AccountSwitcherScreen extends ConsumerWidget {
                   return Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: OutlinedButton.icon(
-                      onPressed: () => context.go('/register'),
+                      onPressed: () => context.push('/register'),
                       icon: const Icon(Icons.person_add),
                       label: const Text('Tambah Akun Baru'),
                       style: OutlinedButton.styleFrom(
@@ -86,7 +86,10 @@ class AccountSwitcherScreen extends ConsumerWidget {
                         if (account.biometricPublicKey != null)
                           const Text(
                             'Biometrik terdaftar',
-                            style: TextStyle(fontSize: 11, color: Colors.greenAccent),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.greenAccent,
+                            ),
                           ),
                       ],
                     ),
@@ -113,27 +116,26 @@ class AccountSwitcherScreen extends ConsumerWidget {
   ) async {
     final auth = ref.read(authServiceProvider);
 
-    // jika user terdaftar biomerik, gunakan biometric untuk switch
     final account = auth.getUserById(userId);
     if (account == null) return;
 
     if (account.biometricPublicKey != null) {
       final result = await auth.loginWithBiometric(userId);
+      // Always check mounted after every await
+      if (!context.mounted) return;
       if (!result.success) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result.error ?? 'Autentikasi biometrik gagal'),
-              backgroundColor: Colors.redAccent,
-            ),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.error ?? 'Autentikasi biometrik gagal'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
         return;
       }
       ref.read(currentUserProvider.notifier).state = result.user;
     } else {
-      // tanpa biometric, langsung switch akun 
       final result = await auth.switchAccount(userId);
+      if (!context.mounted) return;
       if (!result.success) return;
       ref.read(currentUserProvider.notifier).state = result.user;
     }

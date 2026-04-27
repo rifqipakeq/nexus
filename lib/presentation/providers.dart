@@ -119,6 +119,8 @@ final transactionHistoryProvider =
 final userSafeZonesProvider =
     StateProvider<List<Map<String, dynamic>>>((ref) => []);
 
+final userHasConfiguredZonesProvider = StateProvider<bool>((ref) => false);
+
 /// timezone list
 final selectedTimezoneProvider =
     StateProvider<String>((ref) => 'Asia/Jakarta');

@@ -43,13 +43,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   /// Load safe zones dan timezone preference dari storage
   Future<void> _loadUserPreferences() async {
     final storage = ref.read(userScopedStorageProvider);
-    // Load safe zones
     final zones = storage.getSafeZones();
     ref.read(userSafeZonesProvider.notifier).state = zones;
-    // Load timezone
+    final hasConfigured = storage.getHasConfiguredZones();
+    ref.read(userHasConfiguredZonesProvider.notifier).state = hasConfigured;
     final tz2 = storage.getSelectedTimezone();
     ref.read(selectedTimezoneProvider.notifier).state = tz2;
-    // Now check safe zone with user zones
     await _checkSafeZone();
   }
 
@@ -143,7 +142,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Future<void> _checkSafeZone() async {
     final locationService = ref.read(locationServiceProvider);
     final userZones = ref.read(userSafeZonesProvider);
-    final isInside = await locationService.isInsideAnyZone(userZones);
+    final hasConfigured = ref.read(userHasConfiguredZonesProvider);
+    final isInside = await locationService.isInsideAnyZone(
+      userZones,
+      userHasConfiguredZones: hasConfigured,
+    );
     ref.read(isInSafeZoneProvider.notifier).state = isInside;
   }
 
@@ -347,6 +350,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     ref.invalidate(isInSafeZoneProvider);
     ref.invalidate(transactionHistoryProvider);
     ref.invalidate(userSafeZonesProvider);
+    ref.invalidate(userHasConfiguredZonesProvider);
     ref.invalidate(selectedTimezoneProvider);
 
     // 5. Navigate to login

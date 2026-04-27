@@ -45,13 +45,22 @@ class LocationService {
   }
 
   /// cek apakah user berada di salah satu safe zone milik user.
-  /// Jika belum ada zone yang dibuat, fallback ke zone dari .env
-  Future<bool> isInsideAnyZone(List<Map<String, dynamic>> userZones) async {
+  /// - Jika user belum pernah konfigurasi zona → fallback ke .env 
+  /// - Jika user pernah punya zona lalu dihapus semua → return false 
+  /// - Jika ada zona → cek apakah posisi saat ini masuk salah satunya
+  Future<bool> isInsideAnyZone(
+    List<Map<String, dynamic>> userZones, {
+    required bool userHasConfiguredZones,
+  }) async {
     try {
       final position = await getCurrentPosition();
 
       if (userZones.isEmpty) {
-        // fallback ke zona dari .env
+        if (userHasConfiguredZones) {
+          // User pernah punya zona tapi sekarang kosong → transaksi tidak valid
+          return false;
+        }
+        // Belum pernah konfigurasi → fallback ke zona dari .env
         final distance = _calculateDistance(
           position.latitude,
           position.longitude,

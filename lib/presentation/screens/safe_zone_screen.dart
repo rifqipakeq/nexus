@@ -181,8 +181,9 @@ class _SafeZoneScreenState extends ConsumerState<SafeZoneScreen> {
     currentZones.add(newZone);
 
     await storage.saveSafeZones(currentZones);
-    ref.read(userSafeZonesProvider.notifier).state =
-        List.from(currentZones);
+    ref.read(userSafeZonesProvider.notifier).state = List.from(currentZones);
+    // Mark that user has now configured zones (affects isInsideAnyZone logic)
+    ref.read(userHasConfiguredZonesProvider.notifier).state = true;
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

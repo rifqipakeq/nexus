@@ -16,6 +16,7 @@ class AppConstants {
   static String userGameBox(String userId) => 'user_${userId}_game';
   static const String userSafeZonesKey = 'user_safe_zones';
   static const String userTimezoneKey = 'user_timezone';
+  static const String userHasConfiguredZonesKey = 'user_has_configured_zones';
 
   // Secure storage keys (global)
   static const String secureKeyAesKey = 'aes_encryption_key';
@@ -30,5 +31,5 @@ class AppConstants {
   static const int sepoliaChainId = 11155111;
 
   // durasi cek balance untuk notif
-  static const Duration balancePollInterval = Duration(seconds: 30);
+  static const Duration balancePollInterval = Duration(seconds: 10);
 }
