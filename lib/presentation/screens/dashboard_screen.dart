@@ -28,6 +28,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   bool _isProximityNear = false;
 
   Timer? _balancePollTimer;
+  Timer? _pricePollTimer;
 
   @override
   void initState() {
@@ -38,6 +39,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     _startMotionDetection();
     _startProximityDetection();
     _startBalancePolling();
+    _startPricePolling();
   }
 
   /// Load safe zones dan timezone preference dari storage
@@ -101,10 +103,77 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
   }
 
+  /// Fetches ONLY the wallet balance from the blockchain RPC.
+  /// Fast because it doesn't call any external price API.
+  /// Used for the frequent poll and for immediate refresh after sending.
+  Future<void> _refreshBalance() async {
+    if (!mounted) return;
+    final address = ref.read(walletAddressProvider);
+    if (address == null) return;
+    try {
+      final blockchain = ref.read(blockchainServiceProvider);
+      final storage = ref.read(userScopedStorageProvider);
+      final balance = await blockchain.getBalance(address);
+      if (!mounted) return;
+
+      // Incoming ETH detection
+      final lastNotified = storage.getLastNotifiedBalance();
+      final notifications = ref.read(notificationServiceProvider);
+      final notified = await notifications.checkBalanceChange(
+        currentBalance: balance,
+        lastNotifiedBalance: lastNotified,
+      );
+      if (!mounted) return;
+      if (notified) {
+        final received = balance - lastNotified;
+        await storage.addTransaction({
+          'type': 'received',
+          'from': 'External',
+          'to': address,
+          'value': '${received.toStringAsFixed(6)} ETH',
+          'status': 'confirmed',
+          'date': DateTime.now().toIso8601String(),
+          'hash': 'poll_${DateTime.now().millisecondsSinceEpoch}',
+        });
+        if (!mounted) return;
+        ref.read(transactionHistoryProvider.notifier).state =
+            storage.getTransactionHistory();
+        await storage.saveLastNotifiedBalance(balance);
+      }
+
+      ref.read(walletBalanceProvider.notifier).state = balance;
+      await storage.saveBalance(balance);
+    } catch (_) {
+      // Silently ignore — will retry next cycle
+    }
+  }
+
   void _startBalancePolling() {
     _balancePollTimer = Timer.periodic(
       AppConstants.balancePollInterval,
-      (_) => _loadData(),
+      (_) => _refreshBalance(), // fast: blockchain RPC only
+    );
+  }
+
+  /// Refreshes ETH price from CoinGecko. Called less frequently (every 5 min)
+  /// so rate-limiting doesn't block balance updates.
+  Future<void> _refreshPrice() async {
+    if (!mounted) return;
+    try {
+      final priceService = ref.read(priceServiceProvider);
+      final storage = ref.read(userScopedStorageProvider);
+      final prices = await priceService.getEthPrice();
+      if (!mounted) return;
+      ref.read(ethPriceProvider.notifier).state = prices;
+      await storage.cachePrices(prices);
+    } catch (_) {}
+  }
+
+  void _startPricePolling() {
+    // Price updates every 5 minutes — infrequent enough to avoid rate-limiting
+    _pricePollTimer = Timer.periodic(
+      const Duration(minutes: 5),
+      (_) => _refreshPrice(),
     );
   }
 
@@ -360,6 +429,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   void dispose() {
     _balancePollTimer?.cancel();
+    _pricePollTimer?.cancel();
     ref.read(motionServiceProvider).stopAll();
     super.dispose();
   }
@@ -693,7 +763,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     icon: Icons.send,
                     label: 'Transfer',
                     enabled: isInSafeZone && address != null,
-                    onTap: () => context.push('/send'),
+                    onTap: () async {
+                      await context.push('/send');
+                      // Immediately refresh balance when returning from send
+                      // screen — no need to wait for the next poll cycle.
+                      await _refreshBalance();
+                    },
                   ),
                   _ActionCard(
                     icon: Icons.smart_toy,
