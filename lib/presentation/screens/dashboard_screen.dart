@@ -369,6 +369,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final balanceVisible = ref.watch(balanceVisibleProvider);
     final isInSafeZone = ref.watch(isInSafeZoneProvider);
 
+    ref.listen<List<Map<String, dynamic>>>(userSafeZonesProvider, (_, __) {
+      _checkSafeZone();
+    });
+
     final ethUsd = prices['usd'] ?? 0.0;
     final ethIdr = prices['idr'] ?? 0.0;
     final ethCny = prices['cny'] ?? 0.0;
@@ -707,7 +711,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   _ActionCard(
                     icon: Icons.shield_outlined,
                     label: 'Zona Aman',
-                    onTap: () => context.push('/safe-zones'),
+                    onTap: () async {
+                      await context.push('/safe-zones');
+                      await _checkSafeZone();
+                    },
                   ),
                 ],
               ),
