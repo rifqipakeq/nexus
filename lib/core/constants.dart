@@ -14,6 +14,8 @@ class AppConstants {
   static String userWalletBox(String userId) => 'user_${userId}_wallet';
   static String userChatBox(String userId) => 'user_${userId}_chat';
   static String userGameBox(String userId) => 'user_${userId}_game';
+  static const String userSafeZonesKey = 'user_safe_zones';
+  static const String userTimezoneKey = 'user_timezone';
 
   // Secure storage keys (global)
   static const String secureKeyAesKey = 'aes_encryption_key';

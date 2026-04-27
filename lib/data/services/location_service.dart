@@ -44,6 +44,47 @@ class LocationService {
     }
   }
 
+  /// cek apakah user berada di salah satu safe zone milik user.
+  /// Jika belum ada zone yang dibuat, fallback ke zone dari .env
+  Future<bool> isInsideAnyZone(List<Map<String, dynamic>> userZones) async {
+    try {
+      final position = await getCurrentPosition();
+
+      if (userZones.isEmpty) {
+        // fallback ke zona dari .env
+        final distance = _calculateDistance(
+          position.latitude,
+          position.longitude,
+          EnvConfig.safeZoneLat,
+          EnvConfig.safeZoneLng,
+        );
+        return distance <= EnvConfig.safeZoneRadius;
+      }
+
+      for (final zone in userZones) {
+        final lat = (zone['lat'] as num).toDouble();
+        final lng = (zone['lng'] as num).toDouble();
+        final radius = (zone['radius'] as num).toDouble();
+        final distance = _calculateDistance(
+          position.latitude,
+          position.longitude,
+          lat,
+          lng,
+        );
+        if (distance <= radius) return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Ambil posisi saat ini (digunakan untuk menyimpan safe zone baru)
+  Future<Map<String, double>> getCurrentCoordinates() async {
+    final position = await getCurrentPosition();
+    return {'lat': position.latitude, 'lng': position.longitude};
+  }
+
   /// rumus untuk menghitung jarak antara dua titik koordinat (Haversine formula)
   double _calculateDistance(
     double lat1,

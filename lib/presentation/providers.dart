@@ -114,3 +114,11 @@ final totalGamesProvider = StateProvider<int>((ref) => 0);
 // Transaction History State
 final transactionHistoryProvider =
     StateProvider<List<Map<String, String>>>((ref) => []);
+
+/// safe zone list
+final userSafeZonesProvider =
+    StateProvider<List<Map<String, dynamic>>>((ref) => []);
+
+/// timezone list
+final selectedTimezoneProvider =
+    StateProvider<String>((ref) => 'Asia/Jakarta');

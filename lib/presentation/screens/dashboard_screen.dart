@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:timezone/data/latest.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
 import '../../core/constants.dart';
 import '../providers.dart';
 import 'package:intl/intl.dart';
@@ -30,11 +32,25 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    tz.initializeTimeZones();
+    _loadUserPreferences();
     _loadData();
     _startMotionDetection();
     _startProximityDetection();
-    _checkSafeZone();
     _startBalancePolling();
+  }
+
+  /// Load safe zones dan timezone preference dari storage
+  Future<void> _loadUserPreferences() async {
+    final storage = ref.read(userScopedStorageProvider);
+    // Load safe zones
+    final zones = storage.getSafeZones();
+    ref.read(userSafeZonesProvider.notifier).state = zones;
+    // Load timezone
+    final tz2 = storage.getSelectedTimezone();
+    ref.read(selectedTimezoneProvider.notifier).state = tz2;
+    // Now check safe zone with user zones
+    await _checkSafeZone();
   }
 
   Future<void> _loadData() async {
@@ -126,7 +142,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   Future<void> _checkSafeZone() async {
     final locationService = ref.read(locationServiceProvider);
-    final isInside = await locationService.isInsideSafeZone();
+    final userZones = ref.read(userSafeZonesProvider);
+    final isInside = await locationService.isInsideAnyZone(userZones);
     ref.read(isInSafeZoneProvider.notifier).state = isInside;
   }
 
@@ -329,6 +346,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     ref.invalidate(totalGamesProvider);
     ref.invalidate(isInSafeZoneProvider);
     ref.invalidate(transactionHistoryProvider);
+    ref.invalidate(userSafeZonesProvider);
+    ref.invalidate(selectedTimezoneProvider);
 
     // 5. Navigate to login
     if (mounted) context.go('/login');
@@ -390,11 +409,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadData,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
+      body: Column(
+        children: [
+          // ── Live Timezone Clock ────────────────────────────────────────
+          _ClockWidget(onRefresh: _checkSafeZone),
+          // ── Scrollable content ─────────────────────────────────────────
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _loadData,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -666,7 +691,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   ),
                   _ActionCard(
                     icon: Icons.smart_toy,
-                    label: 'Chatbot',
+                    label: 'Nexus Bot',
                     onTap: () => context.push('/chat'),
                   ),
                   _ActionCard(
@@ -678,6 +703,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     icon: Icons.history,
                     label: 'Riwayat',
                     onTap: () => context.push('/history'),
+                  ),
+                  _ActionCard(
+                    icon: Icons.shield_outlined,
+                    label: 'Zona Aman',
+                    onTap: () => context.push('/safe-zones'),
                   ),
                 ],
               ),
@@ -702,6 +732,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ],
           ),
         ),
+      ),
+          ),
+        ],
       ),
     );
   }
@@ -791,6 +824,253 @@ class _ActionCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+// Timezone Clock Widget 
+
+class _ClockWidget extends ConsumerStatefulWidget {
+  final Future<void> Function() onRefresh;
+  const _ClockWidget({required this.onRefresh});
+
+  @override
+  ConsumerState<_ClockWidget> createState() => _ClockWidgetState();
+}
+
+class _ClockWidgetState extends ConsumerState<_ClockWidget> {
+  Timer? _timer;
+  DateTime _now = DateTime.now();
+
+  static const List<Map<String, String>> _timezones = [
+    {'label': 'Jakarta', 'sub': 'WIB · UTC+7', 'tz': 'Asia/Jakarta'},
+    {'label': 'Makassar', 'sub': 'WITA · UTC+8', 'tz': 'Asia/Makassar'},
+    {'label': 'Jayapura', 'sub': 'WIT · UTC+9', 'tz': 'Asia/Jayapura'},
+    {'label': 'London', 'sub': 'GMT/BST', 'tz': 'Europe/London'},
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String _formatTime(String tzName) {
+    try {
+      final location = tz.getLocation(tzName);
+      final tzNow = tz.TZDateTime.from(_now, location);
+      final h = tzNow.hour.toString().padLeft(2, '0');
+      final m = tzNow.minute.toString().padLeft(2, '0');
+      final s = tzNow.second.toString().padLeft(2, '0');
+      return '$h:$m:$s';
+    } catch (_) {
+      final h = _now.hour.toString().padLeft(2, '0');
+      final m = _now.minute.toString().padLeft(2, '0');
+      final s = _now.second.toString().padLeft(2, '0');
+      return '$h:$m:$s';
+    }
+  }
+
+  String _formatDate(String tzName) {
+    try {
+      final location = tz.getLocation(tzName);
+      final tzNow = tz.TZDateTime.from(_now, location);
+      return DateFormat('EEE, d MMM yyyy', 'en_US').format(tzNow);
+    } catch (_) {
+      return DateFormat('EEE, d MMM yyyy', 'en_US').format(_now);
+    }
+  }
+
+  void _openTimezonePicker() {
+    final currentTz = ref.read(selectedTimezoneProvider);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF16213E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: Text(
+                'Pilih Zona Waktu',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            ..._timezones.map((tzOption) {
+              final selected = tzOption['tz'] == currentTz;
+              return ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                tileColor: selected
+                    ? const Color(0xFF6C63FF).withAlpha(40)
+                    : Colors.transparent,
+                leading: Icon(
+                  Icons.language,
+                  color: selected ? const Color(0xFF6C63FF) : Colors.white54,
+                ),
+                title: Text(
+                  tzOption['label']!,
+                  style: TextStyle(
+                    color:
+                        selected ? const Color(0xFF6C63FF) : Colors.white,
+                    fontWeight:
+                        selected ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+                subtitle: Text(
+                  tzOption['sub']!,
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 12,
+                  ),
+                ),
+                trailing: selected
+                    ? const Icon(
+                        Icons.check_circle,
+                        color: Color(0xFF6C63FF),
+                      )
+                    : null,
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  final storage = ref.read(userScopedStorageProvider);
+                  await storage.saveSelectedTimezone(tzOption['tz']!);
+                  ref.read(selectedTimezoneProvider.notifier).state =
+                      tzOption['tz']!;
+                  await widget.onRefresh();
+                },
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedTz = ref.watch(selectedTimezoneProvider);
+    final tzMeta = _timezones.firstWhere(
+      (t) => t['tz'] == selectedTz,
+      orElse: () => _timezones.first,
+    );
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: const Color(0xFF0F3460),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(60),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Clock display
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _formatTime(selectedTz),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.5,
+                ),
+              ),
+              Text(
+                _formatDate(selectedTz),
+                style: const TextStyle(
+                  color: Colors.white60,
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
+
+          GestureDetector(
+            onTap: _openTimezonePicker,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 6,
+              ),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6C63FF).withAlpha(40),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: const Color(0xFF6C63FF).withAlpha(120),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.language,
+                    size: 13,
+                    color: Color(0xFF6C63FF),
+                  ),
+                  const SizedBox(width: 5),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        tzMeta['label']!,
+                        style: const TextStyle(
+                          color: Color(0xFF6C63FF),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        tzMeta['sub']!,
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 9,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(
+                    Icons.expand_more,
+                    size: 14,
+                    color: Color(0xFF6C63FF),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

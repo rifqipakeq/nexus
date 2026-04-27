@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
+import '../../core/constants.dart';
 
 class UserScopedStorage {
   Box? _walletBox;
@@ -199,5 +200,34 @@ class UserScopedStorage {
 
   Future<void> clearTransactionHistory() async {
     await walletBox.put('tx_history', <dynamic>[]);
+  }
+
+  Future<void> saveSafeZones(List<Map<String, dynamic>> zones) async {
+    await walletBox.put(AppConstants.userSafeZonesKey, zones);
+  }
+
+  List<Map<String, dynamic>> getSafeZones() {
+    final raw = walletBox.get(
+      AppConstants.userSafeZonesKey,
+      defaultValue: <dynamic>[],
+    );
+    return (raw as List)
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
+  Future<void> clearSafeZones() async {
+    await walletBox.put(AppConstants.userSafeZonesKey, <dynamic>[]);
+  }
+
+  Future<void> saveSelectedTimezone(String tzName) async {
+    await walletBox.put(AppConstants.userTimezoneKey, tzName);
+  }
+
+  String getSelectedTimezone() {
+    return walletBox.get(
+      AppConstants.userTimezoneKey,
+      defaultValue: 'Asia/Jakarta',
+    ) as String;
   }
 }

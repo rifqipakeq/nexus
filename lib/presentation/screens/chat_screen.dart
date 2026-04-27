@@ -20,13 +20,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     super.dispose();
   }
 
+  /// Kumpulkan context dari providers dan kirim ke Gemini
   Future<void> _sendMessage() async {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
 
     _controller.clear();
 
-    // Add user message
+    // Simpan pesan user
     final storage = ref.read(userScopedStorageProvider);
     final userMsg = {'role': 'user', 'text': text};
     await storage.addChatMessage(userMsg);
@@ -36,9 +37,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     _scrollToBottom();
 
-    // Get AI response
+    // Kumpulkan context dari providers
+    final currentUser = ref.read(currentUserProvider);
+    final balance = ref.read(walletBalanceProvider);
+    final address = ref.read(walletAddressProvider);
+    final prices = ref.read(ethPriceProvider);
+    final isInSafeZone = ref.read(isInSafeZoneProvider);
+    final safeZones = ref.read(userSafeZonesProvider);
+    final timezone = ref.read(selectedTimezoneProvider);
+
+    final context = {
+      'username': currentUser?.username ?? 'User',
+      'walletAddress': address,
+      'balance': balance,
+      'ethUsd': prices['usd'] ?? 0.0,
+      'ethIdr': prices['idr'] ?? 0.0,
+      'isInSafeZone': isInSafeZone,
+      'safeZoneCount': safeZones.length,
+      'timezone': timezone,
+    };
+
+    // Kirim ke Gemini dengan context
     final gemini = ref.read(geminiServiceProvider);
-    final response = await gemini.sendMessage(text);
+    final response = await gemini.sendContextualMessage(text, context);
 
     final aiMsg = {'role': 'assistant', 'text': response};
     await storage.addChatMessage(aiMsg);
@@ -71,10 +92,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Widget build(BuildContext context) {
     final chatHistory = ref.watch(chatHistoryProvider);
     final isLoading = ref.watch(chatLoadingProvider);
+    final currentUser = ref.watch(currentUserProvider);
+    final balance = ref.watch(walletBalanceProvider);
+    final isInSafeZone = ref.watch(isInSafeZoneProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AI Chat'),
+        title: const Text('NexusBot'),
         actions: [
           IconButton(
             icon: const Icon(Icons.delete_outline),
@@ -85,22 +109,78 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ),
       body: Column(
         children: [
-          // Messages List 
+          _ContextBadge(
+            username: currentUser?.username,
+            balance: balance,
+            isInSafeZone: isInSafeZone,
+          ),
+
+          // Messages List
           Expanded(
             child: chatHistory.isEmpty
                 ? Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          Icons.smart_toy,
-                          size: 64,
-                          color: Colors.grey[700],
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF16213E),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.smart_toy,
+                            size: 48,
+                            color: Color(0xFF6C63FF),
+                          ),
                         ),
                         const SizedBox(height: 16),
+                        const Text(
+                          'Halo, Saya NexusBot',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
                         Text(
-                          'Tanyakan apa saja tentang kripto!',
-                          style: TextStyle(color: Colors.grey[500]),
+                          'Ada yang bisa saya bantu?',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.grey[500],
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          alignment: WrapAlignment.center,
+                          children: [
+                            _SuggestionChip(
+                              label: 'Berapa saldo saya?',
+                              onTap: () {
+                                _controller.text = 'Berapa saldo saya?';
+                                _sendMessage();
+                              },
+                            ),
+                            _SuggestionChip(
+                              label: 'Bisa transaksi sekarang?',
+                              onTap: () {
+                                _controller.text =
+                                    'Apakah saya bisa melakukan transaksi sekarang?';
+                                _sendMessage();
+                              },
+                            ),
+                            _SuggestionChip(
+                              label: 'Harga ETH hari ini?',
+                              onTap: () {
+                                _controller.text = 'Berapa harga ETH sekarang?';
+                                _sendMessage();
+                              },
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -120,7 +200,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   ),
           ),
 
-          //  Loading Indicator
+          // Loading Indicator
           if (isLoading)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -133,14 +213,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   ),
                   SizedBox(width: 8),
                   Text(
-                    'AI sedang mengetik...',
+                    'NexusBot sedang mengetik...',
                     style: TextStyle(color: Colors.grey, fontSize: 12),
                   ),
                 ],
               ),
             ),
 
-          // Input Area 
+          // Input Area
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -153,7 +233,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   child: TextField(
                     controller: _controller,
                     decoration: const InputDecoration(
-                      hintText: 'Ketik pesan Anda...',
+                      hintText: 'Tanyakan sesuatu...',
                       border: InputBorder.none,
                     ),
                     textInputAction: TextInputAction.send,
@@ -174,6 +254,88 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 }
 
+// Context Badge 
+class _ContextBadge extends StatelessWidget {
+  final String? username;
+  final double balance;
+  final bool isInSafeZone;
+
+  const _ContextBadge({
+    required this.username,
+    required this.balance,
+    required this.isInSafeZone,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (username == null) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      color: const Color(0xFF0F3460),
+      child: Row(
+        children: [
+          const Icon(Icons.person, size: 12, color: Colors.white54),
+          const SizedBox(width: 4),
+          Text(
+            username!,
+            style: const TextStyle(color: Colors.white70, fontSize: 11),
+          ),
+          const SizedBox(width: 12),
+          const Icon(Icons.currency_bitcoin, size: 12, color: Colors.white54),
+          const SizedBox(width: 4),
+          Text(
+            '${balance.toStringAsFixed(4)} ETH',
+            style: const TextStyle(color: Colors.white70, fontSize: 11),
+          ),
+          const Spacer(),
+          Icon(
+            isInSafeZone ? Icons.shield : Icons.shield_outlined,
+            size: 12,
+            color: isInSafeZone ? Colors.greenAccent : Colors.redAccent,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            isInSafeZone ? 'Zona Aman' : 'Luar Zona',
+            style: TextStyle(
+              color: isInSafeZone ? Colors.greenAccent : Colors.redAccent,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Suggestion prompt
+class _SuggestionChip extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _SuggestionChip({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xFF6C63FF).withAlpha(30),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFF6C63FF).withAlpha(80)),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(color: Color(0xFF6C63FF), fontSize: 12),
+        ),
+      ),
+    );
+  }
+}
+
+// Chat Bubble 
 class _ChatBubble extends StatelessWidget {
   final String text;
   final bool isUser;

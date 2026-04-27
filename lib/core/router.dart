@@ -12,6 +12,7 @@ import '../presentation/screens/scanner_screen.dart';
 import '../presentation/screens/send_transaction_screen.dart';
 import '../presentation/screens/history_screen.dart';
 import '../presentation/screens/account_switcher_screen.dart';
+import '../presentation/screens/safe_zone_screen.dart';
 
 /// GoRouter config
 final routerProvider = Provider<GoRouter>((ref) {
@@ -52,6 +53,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/review',
         builder: (context, state) => const ReviewScreen(),
+      ),
+      GoRoute(
+        path: '/safe-zones',
+        builder: (context, state) => const SafeZoneScreen(),
       ),
     ],
     errorBuilder: (context, state) => Scaffold(
