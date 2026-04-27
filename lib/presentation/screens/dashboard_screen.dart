@@ -21,12 +21,10 @@ class DashboardScreen extends ConsumerStatefulWidget {
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   bool _isLoading = false;
-
   String _selectedCurrency = 'usd';
-
+  String selectedCurrency = 'usd';
   bool _wasVisibleBeforeProximity = true;
   bool _isProximityNear = false;
-
   Timer? _balancePollTimer;
   Timer? _pricePollTimer;
 
@@ -42,7 +40,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     _startPricePolling();
   }
 
-  /// Load safe zones dan timezone preference dari storage
   Future<void> _loadUserPreferences() async {
     final storage = ref.read(userScopedStorageProvider);
     final zones = storage.getSafeZones();
@@ -103,9 +100,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
   }
 
-  /// Fetches ONLY the wallet balance from the blockchain RPC.
-  /// Fast because it doesn't call any external price API.
-  /// Used for the frequent poll and for immediate refresh after sending.
   Future<void> _refreshBalance() async {
     if (!mounted) return;
     final address = ref.read(walletAddressProvider);
@@ -136,27 +130,23 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           'hash': 'poll_${DateTime.now().millisecondsSinceEpoch}',
         });
         if (!mounted) return;
-        ref.read(transactionHistoryProvider.notifier).state =
-            storage.getTransactionHistory();
+        ref.read(transactionHistoryProvider.notifier).state = storage
+            .getTransactionHistory();
         await storage.saveLastNotifiedBalance(balance);
       }
 
       ref.read(walletBalanceProvider.notifier).state = balance;
       await storage.saveBalance(balance);
-    } catch (_) {
-      // Silently ignore — will retry next cycle
-    }
+    } catch (_) {}
   }
 
   void _startBalancePolling() {
     _balancePollTimer = Timer.periodic(
       AppConstants.balancePollInterval,
-      (_) => _refreshBalance(), // fast: blockchain RPC only
+      (_) => _refreshBalance(),
     );
   }
 
-  /// Refreshes ETH price from CoinGecko. Called less frequently (every 5 min)
-  /// so rate-limiting doesn't block balance updates.
   Future<void> _refreshPrice() async {
     if (!mounted) return;
     try {
@@ -170,7 +160,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   void _startPricePolling() {
-    // Price updates every 5 minutes — infrequent enough to avoid rate-limiting
     _pricePollTimer = Timer.periodic(
       const Duration(minutes: 5),
       (_) => _refreshPrice(),
@@ -451,10 +440,59 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final ethIdr = prices['idr'] ?? 0.0;
     final ethCny = prices['cny'] ?? 0.0;
     final balanceUsd = balance * ethUsd;
+    final balanceIdr = balance * ethIdr;
+    final balanceCny = balance * ethCny;
+
+    void _changeCurrency() {
+      setState(() {
+        if (selectedCurrency == 'usd') {
+          selectedCurrency = 'idr';
+        } else if (selectedCurrency == 'idr') {
+          selectedCurrency = 'cny';
+        } else {
+          selectedCurrency = 'usd';
+        }
+      });
+    }
+
+    String getCurrencySymbol() {
+      switch (selectedCurrency) {
+        case 'idr':
+          return 'Rp';
+        case 'cny':
+          return '¥';
+        default:
+          return '\$';
+      }
+    }
+
+    double getConvertedBalance() {
+      switch (selectedCurrency) {
+        case 'idr':
+          return balance * ethIdr;
+        case 'cny':
+          return balance * ethCny;
+        default:
+          return balance * ethUsd;
+      }
+    }
 
     final idrFormatter = NumberFormat('#,##0', 'id_ID');
     final usdFormatter = NumberFormat('#,##0.00', 'en_US');
     final cnyFormatter = NumberFormat('#,##0.00', 'zh_CN');
+
+    String getFormattedBalance() {
+      final value = getConvertedBalance();
+
+      switch (selectedCurrency) {
+        case 'idr':
+          return 'Rp ${idrFormatter.format(value)}';
+        case 'cny':
+          return '¥ ${cnyFormatter.format(value)}';
+        default:
+          return '\$ ${usdFormatter.format(value)}';
+      }
+    }
 
     ImageProvider? avatarImage;
     if (currentUser?.avatarBase64 != null &&
@@ -496,327 +534,345 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // User Info
-              if (currentUser != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Row(
-                    children: [
-                      GestureDetector(
-                        onTap: _pickAvatar,
-                        child: CircleAvatar(
-                          radius: 22,
-                          backgroundColor: const Color(0xFF6C63FF),
-                          backgroundImage: avatarImage,
-                          child: avatarImage == null
-                              ? Text(
-                                  currentUser.username[0].toUpperCase(),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 18,
-                                  ),
-                                )
-                              : null,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // User Info
+                    if (currentUser != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Row(
                           children: [
-                            Row(
-                              children: [
-                                Text(
-                                  'Halo, ${currentUser.username}',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
+                            GestureDetector(
+                              onTap: _pickAvatar,
+                              child: CircleAvatar(
+                                radius: 22,
+                                backgroundColor: const Color(0xFF6C63FF),
+                                backgroundImage: avatarImage,
+                                child: avatarImage == null
+                                    ? Text(
+                                        currentUser.username[0].toUpperCase(),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 18,
+                                        ),
+                                      )
+                                    : null,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        'Halo, ${currentUser.username}',
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      if (currentUser.biometricPublicKey !=
+                                          null)
+                                        const Padding(
+                                          padding: EdgeInsets.only(left: 4),
+                                          child: Icon(
+                                            Icons.verified_user,
+                                            size: 16,
+                                            color: Colors.greenAccent,
+                                          ),
+                                        ),
+                                    ],
                                   ),
-                                ),
-                                if (currentUser.biometricPublicKey != null)
-                                  const Padding(
-                                    padding: EdgeInsets.only(left: 4),
-                                    child: Icon(
-                                      Icons.verified_user,
-                                      size: 16,
-                                      color: Colors.greenAccent,
+                                  Text(
+                                    'Ketuk avatar untuk mengubah foto',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey[600],
                                     ),
                                   ),
-                              ],
-                            ),
-                            Text(
-                              'Ketuk avatar untuk mengubah foto',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey[600],
+                                ],
                               ),
                             ),
                           ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
 
-              // Wallet Card
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Wallet',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
+                    // Wallet Card
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'Wallet',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (address != null)
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.qr_code,
+                                          size: 22,
+                                        ),
+                                        onPressed: () => _showQrCode(address),
+                                        tooltip: 'Show QR Code',
+                                      ),
+                                    IconButton(
+                                      icon: Icon(
+                                        balanceVisible
+                                            ? Icons.visibility
+                                            : Icons.visibility_off,
+                                      ),
+                                      onPressed: () {
+                                        ref
+                                                .read(
+                                                  balanceVisibleProvider
+                                                      .notifier,
+                                                )
+                                                .state =
+                                            !balanceVisible;
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
-                          ),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (address != null)
-                                IconButton(
-                                  icon: const Icon(Icons.qr_code, size: 22),
-                                  onPressed: () => _showQrCode(address),
-                                  tooltip: 'Show QR Code',
+                            if (address != null) ...[
+                              GestureDetector(
+                                onTap: () => _copyAddress(address),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      '${address.substring(0, 6)}...${address.substring(address.length - 4)}',
+                                      style: TextStyle(
+                                        color: Colors.grey[400],
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                      Icons.copy,
+                                      size: 14,
+                                      color: Colors.grey[500],
+                                    ),
+                                  ],
                                 ),
-                              IconButton(
-                                icon: Icon(
-                                  balanceVisible
-                                      ? Icons.visibility
-                                      : Icons.visibility_off,
-                                ),
-                                onPressed: () {
-                                  ref
-                                          .read(balanceVisibleProvider.notifier)
-                                          .state =
-                                      !balanceVisible;
-                                },
                               ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      if (address != null) ...[
-                        GestureDetector(
-                          onTap: () => _copyAddress(address),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
+                              const SizedBox(height: 12),
                               Text(
-                                '${address.substring(0, 6)}...${address.substring(address.length - 4)}',
-                                style: TextStyle(
-                                  color: Colors.grey[400],
-                                  fontSize: 13,
+                                balanceVisible
+                                    ? '${balance.toStringAsFixed(6)} ETH'
+                                    : '••••••',
+                                style: const TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              const SizedBox(width: 4),
-                              Icon(
-                                Icons.copy,
-                                size: 14,
-                                color: Colors.grey[500],
+                              const SizedBox(height: 4),
+                              GestureDetector(
+                                onTap: _changeCurrency,
+                                child: Text(
+                                  balanceVisible
+                                      ? '${getFormattedBalance()}'
+                                      : '••••',
+                                  style: TextStyle(
+                                    color: Colors.grey[400],
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '📍 ${isInSafeZone ? "Di Dalam Zona Aman" : "Di Luar Zona Aman"}',
+                                style: TextStyle(
+                                  color: isInSafeZone
+                                      ? Colors.greenAccent
+                                      : Colors.redAccent,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ] else ...[
+                              const SizedBox(height: 12),
+                              const Text('Belum ada wallet'),
+                              const SizedBox(height: 12),
+                              ElevatedButton.icon(
+                                onPressed: _generateWallet,
+                                icon: const Icon(Icons.add),
+                                label: const Text('Generate Wallet'),
                               ),
                             ],
-                          ),
+                          ],
                         ),
-                        const SizedBox(height: 12),
-                        Text(
-                          balanceVisible
-                              ? '${balance.toStringAsFixed(6)} ETH'
-                              : '••••••',
-                          style: const TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                          ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'Harga ETH',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                // Currency dropdown
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: Colors.grey[700]!,
+                                    ),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      value: _selectedCurrency,
+                                      isDense: true,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      items: const [
+                                        DropdownMenuItem(
+                                          value: 'usd',
+                                          child: Text('USD'),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'idr',
+                                          child: Text('IDR'),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'cny',
+                                          child: Text('CNY'),
+                                        ),
+                                      ],
+                                      onChanged: (v) {
+                                        if (v != null) {
+                                          setState(() => _selectedCurrency = v);
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            if (_isLoading)
+                              const Center(child: CircularProgressIndicator())
+                            else
+                              _buildPriceRow(
+                                currency: _selectedCurrency,
+                                ethUsd: ethUsd,
+                                ethIdr: ethIdr,
+                                ethCny: ethCny,
+                                usdFormatter: usdFormatter,
+                                idrFormatter: idrFormatter,
+                                cnyFormatter: cnyFormatter,
+                              ),
+                          ],
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          balanceVisible
-                              ? '\$${balanceUsd.toStringAsFixed(2)} USD'
-                              : '••••',
-                          style: TextStyle(
-                            color: Colors.grey[400],
-                            fontSize: 16,
-                          ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Quick Actions
+                    GridView.count(
+                      crossAxisCount: 2,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 1.5,
+                      children: [
+                        _ActionCard(
+                          icon: Icons.send,
+                          label: 'Transfer',
+                          enabled: isInSafeZone && address != null,
+                          onTap: () async {
+                            await context.push('/send');
+                            // Immediately refresh balance when returning from send
+                            // screen — no need to wait for the next poll cycle.
+                            await _refreshBalance();
+                          },
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '📍 ${isInSafeZone ? "Di Dalam Zona Aman" : "Di Luar Zona Aman"}',
-                          style: TextStyle(
-                            color: isInSafeZone
-                                ? Colors.greenAccent
-                                : Colors.redAccent,
-                            fontSize: 12,
-                          ),
+                        _ActionCard(
+                          icon: Icons.smart_toy,
+                          label: 'Nexus Bot',
+                          onTap: () => context.push('/chat'),
                         ),
-                      ] else ...[
-                        const SizedBox(height: 12),
-                        const Text('Belum ada wallet'),
-                        const SizedBox(height: 12),
-                        ElevatedButton.icon(
-                          onPressed: _generateWallet,
-                          icon: const Icon(Icons.add),
-                          label: const Text('Generate Wallet'),
+                        _ActionCard(
+                          icon: Icons.videogame_asset,
+                          label: 'Reaction Game',
+                          onTap: () => context.push('/game'),
+                        ),
+                        _ActionCard(
+                          icon: Icons.history,
+                          label: 'Riwayat',
+                          onTap: () => context.push('/history'),
+                        ),
+                        _ActionCard(
+                          icon: Icons.shield_outlined,
+                          label: 'Zona Aman',
+                          onTap: () async {
+                            await context.push('/safe-zones');
+                            await _checkSafeZone();
+                          },
                         ),
                       ],
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
+                    ),
+                    const SizedBox(height: 16),
 
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    // Sensor hints
+                    Center(
+                      child: Column(
                         children: [
-                          const Text(
-                            'Harga ETH',
+                          Text(
+                            'Goyangkan device untuk mengalihkan visibilitas saldo',
                             style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
+                              color: Colors.grey[600],
+                              fontSize: 12,
                             ),
                           ),
-                          // Currency dropdown 
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.grey[700]!),
-                            ),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                value: _selectedCurrency,
-                                isDense: true,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                items: const [
-                                  DropdownMenuItem(
-                                    value: 'usd',
-                                    child: Text('USD'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'idr',
-                                    child: Text('IDR'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'cny',
-                                    child: Text('CNY'),
-                                  ),
-                                ],
-                                onChanged: (v) {
-                                  if (v != null) {
-                                    setState(() => _selectedCurrency = v);
-                                  }
-                                },
-                              ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Tutup sensor jarak untuk menyembunyikan saldo',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 12,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      if (_isLoading)
-                        const Center(child: CircularProgressIndicator())
-                      else
-                        _buildPriceRow(
-                          currency: _selectedCurrency,
-                          ethUsd: ethUsd,
-                          ethIdr: ethIdr,
-                          ethCny: ethCny,
-                          usdFormatter: usdFormatter,
-                          idrFormatter: idrFormatter,
-                          cnyFormatter: cnyFormatter,
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Quick Actions
-              GridView.count(
-                crossAxisCount: 2,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 1.5,
-                children: [
-                  _ActionCard(
-                    icon: Icons.send,
-                    label: 'Transfer',
-                    enabled: isInSafeZone && address != null,
-                    onTap: () async {
-                      await context.push('/send');
-                      // Immediately refresh balance when returning from send
-                      // screen — no need to wait for the next poll cycle.
-                      await _refreshBalance();
-                    },
-                  ),
-                  _ActionCard(
-                    icon: Icons.smart_toy,
-                    label: 'Nexus Bot',
-                    onTap: () => context.push('/chat'),
-                  ),
-                  _ActionCard(
-                    icon: Icons.videogame_asset,
-                    label: 'Reaction Game',
-                    onTap: () => context.push('/game'),
-                  ),
-                  _ActionCard(
-                    icon: Icons.history,
-                    label: 'Riwayat',
-                    onTap: () => context.push('/history'),
-                  ),
-                  _ActionCard(
-                    icon: Icons.shield_outlined,
-                    label: 'Zona Aman',
-                    onTap: () async {
-                      await context.push('/safe-zones');
-                      await _checkSafeZone();
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              // Sensor hints
-              Center(
-                child: Column(
-                  children: [
-                    Text(
-                      'Goyangkan device untuk mengalihkan visibilitas saldo',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Tutup sensor jarak untuk menyembunyikan saldo',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
                     ),
                   ],
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
+            ),
           ),
         ],
       ),
@@ -913,7 +969,7 @@ class _ActionCard extends StatelessWidget {
   }
 }
 
-// Timezone Clock Widget 
+// Timezone Clock Widget
 
 class _ClockWidget extends ConsumerStatefulWidget {
   final Future<void> Function() onRefresh;
@@ -1015,24 +1071,16 @@ class _ClockWidgetState extends ConsumerState<_ClockWidget> {
                 title: Text(
                   tzOption['label']!,
                   style: TextStyle(
-                    color:
-                        selected ? const Color(0xFF6C63FF) : Colors.white,
-                    fontWeight:
-                        selected ? FontWeight.bold : FontWeight.normal,
+                    color: selected ? const Color(0xFF6C63FF) : Colors.white,
+                    fontWeight: selected ? FontWeight.bold : FontWeight.normal,
                   ),
                 ),
                 subtitle: Text(
                   tzOption['sub']!,
-                  style: const TextStyle(
-                    color: Colors.white54,
-                    fontSize: 12,
-                  ),
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
                 ),
                 trailing: selected
-                    ? const Icon(
-                        Icons.check_circle,
-                        color: Color(0xFF6C63FF),
-                      )
+                    ? const Icon(Icons.check_circle, color: Color(0xFF6C63FF))
                     : null,
                 onTap: () async {
                   Navigator.pop(ctx);
@@ -1092,10 +1140,7 @@ class _ClockWidgetState extends ConsumerState<_ClockWidget> {
               ),
               Text(
                 _formatDate(selectedTz),
-                style: const TextStyle(
-                  color: Colors.white60,
-                  fontSize: 11,
-                ),
+                style: const TextStyle(color: Colors.white60, fontSize: 11),
               ),
             ],
           ),
@@ -1103,10 +1148,7 @@ class _ClockWidgetState extends ConsumerState<_ClockWidget> {
           GestureDetector(
             onTap: _openTimezonePicker,
             child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 6,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: const Color(0xFF6C63FF).withAlpha(40),
                 borderRadius: BorderRadius.circular(20),

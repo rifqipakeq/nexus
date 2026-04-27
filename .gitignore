@@ -51,3 +51,5 @@ app.*.map.json
 .env.production
 .env.test
 *.env
+
+/explanations/

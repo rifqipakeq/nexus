@@ -295,7 +295,7 @@ class _SendTransactionScreenState extends ConsumerState<SendTransactionScreen> {
                   decimal: true,
                 ),
                 decoration: InputDecoration(
-                  hintText: '0.01',
+                  hintText: 'Masukan nominal...',
                   helperText: 'Saldo: ${balance.toStringAsFixed(6)} ETH',
                   suffixText: 'ETH',
                 ),
