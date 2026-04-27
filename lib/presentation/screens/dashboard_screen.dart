@@ -415,9 +415,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       ),
       body: Column(
         children: [
-          // ── Live Timezone Clock ────────────────────────────────────────
           _ClockWidget(onRefresh: _checkSafeZone),
-          // ── Scrollable content ─────────────────────────────────────────
           Expanded(
             child: RefreshIndicator(
               onRefresh: _loadData,
