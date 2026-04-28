@@ -4,7 +4,6 @@ import '../../core/env_config.dart';
 
 /// GPS function untuk safe zone transaksi
 class LocationService {
-  /// Request location permission and
   Future<Position> getCurrentPosition() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {

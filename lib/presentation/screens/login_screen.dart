@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -176,6 +177,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     onPressed: () => context.go('/register'),
                     child: const Text('Belum punya akun? Daftar di sini'),
                   ),
+
+                  // if (kDebugMode)
+                  //   TextButton(
+                  //     onPressed: () => context.push('/debug-storage'),
+                  //     child: const Text('Debug Storage'),
+                  //   ),
 
                   // Account switcher link
                   // TextButton(

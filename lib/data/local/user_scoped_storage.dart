@@ -9,16 +9,13 @@ class UserScopedStorage {
   Box? _pricesBox;
   String? _currentUserId;
 
-  // Cek apakah user sudah pernah login
   bool get isInitialized => _currentUserId != null;
   String? get currentUserId => _currentUserId;
 
-  /// Init price box sebagai global variable
   Future<void> initGlobal() async {
     _pricesBox = await Hive.openBox('prices');
   }
 
-  /// Init data unik tiap user, diakses setelah login
   Future<void> openForUser(String userId) async {
     // Close  data user sebelumnya
     await closeUserBoxes();
@@ -31,8 +28,6 @@ class UserScopedStorage {
     debugPrint('Box untuk user: $userId');
   }
 
-  /// Tutup semua box yang terkait user saat logout
-  /// data masih namun cuman bisa akses oleh user terkait
   Future<void> closeUserBoxes() async {
     await _safeClose(_walletBox);
     await _safeClose(_chatBox);
@@ -46,14 +41,12 @@ class UserScopedStorage {
     debugPrint('Tutup semua box user, siap untuk login user lain');
   }
 
-  /// Tutup semua box saat app shutdown
   Future<void> closeAll() async {
     await closeUserBoxes();
     await _safeClose(_pricesBox);
     _pricesBox = null;
   }
 
-  // soft close
   Future<void> _safeClose(Box? box) async {
     if (box != null && box.isOpen) {
       await box.flush();
@@ -61,7 +54,6 @@ class UserScopedStorage {
     }
   }
 
-  // Box accessors
   Box get walletBox {
     _ensureUserOpen();
     return _walletBox!;
@@ -86,15 +78,12 @@ class UserScopedStorage {
     return _pricesBox!;
   }
 
-  // Mekanisme untuk memastikan box user sudah dibuka sebelum data diakses
   void _ensureUserOpen() {
     if (_currentUserId == null || _walletBox == null || !_walletBox!.isOpen) {
       throw StateError('Data user belum diinisialisasi!');
     }
   }
 
-  // Price global var, idr, usd, cny
-  // pakai cache untuk mengurangi loading dan offline support
   Future<void> cachePrices(Map<String, double> prices) async {
     await pricesBox.put('eth_usd', prices['usd']);
     await pricesBox.put('eth_idr', prices['idr']);
@@ -112,7 +101,6 @@ class UserScopedStorage {
 
   String? getPricesLastUpdated() => pricesBox.get('last_updated');
 
-  // Wallet data (user-scoped)
   Future<void> saveWalletAddress(String address) async {
     await walletBox.put('address', address);
   }
@@ -136,17 +124,14 @@ class UserScopedStorage {
     await walletBox.put('last_notified_balance', balance);
   }
 
-  /// Cek notifikasi terakhir, kalo sama tidak perlu kirim notifikasi lagi
   String? getLastNotifiedTxHash() => walletBox.get('last_notified_tx_hash');
 
   Future<void> saveLastNotifiedTxHash(String hash) async {
     await walletBox.put('last_notified_tx_hash', hash);
   }
 
-  // Chat History (User-Scoped)
   Future<void> addChatMessage(Map<String, String> message) async {
     final history = getChatHistory();
-    // tidak pakai append karena nosql
     history.add(message);
     await chatBox.put('history', history);
   }
@@ -162,7 +147,6 @@ class UserScopedStorage {
     await chatBox.put('history', <dynamic>[]);
   }
 
-  // Game Score (User-Scoped)
   Future<void> saveGameScore(int score) async {
     await gameBox.put('score', score);
   }
@@ -184,7 +168,6 @@ class UserScopedStorage {
 
   int getTotalGames() => gameBox.get('total_games', defaultValue: 0) as int;
 
-  // Transaction History (User-Scoped)
   Future<void> addTransaction(Map<String, String> tx) async {
     final history = getTransactionHistory();
     history.insert(0, tx);

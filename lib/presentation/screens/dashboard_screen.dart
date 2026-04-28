@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -383,19 +384,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Future<void> _logout() async {
-    // 1. Close user-scoped storage (prevents data leakage)
     final storage = ref.read(userScopedStorageProvider);
     await storage.closeUserBoxes();
 
-    // 2. Clear blockchain service active user
     final blockchain = ref.read(blockchainServiceProvider);
     blockchain.clearActiveUser();
 
-    // 3. Log out from auth service (clears session in secure storage)
     final auth = ref.read(authServiceProvider);
     await auth.logout();
 
-    // 4. Reset ALL user-scoped providers to prevent stale data
     ref.invalidate(currentUserProvider);
     ref.invalidate(walletAddressProvider);
     ref.invalidate(walletBalanceProvider);
@@ -411,7 +408,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     ref.invalidate(userHasConfiguredZonesProvider);
     ref.invalidate(selectedTimezoneProvider);
 
-    // 5. Navigate to login
     if (mounted) context.go('/login');
   }
 
@@ -439,9 +435,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final ethUsd = prices['usd'] ?? 0.0;
     final ethIdr = prices['idr'] ?? 0.0;
     final ethCny = prices['cny'] ?? 0.0;
-    final balanceUsd = balance * ethUsd;
-    final balanceIdr = balance * ethIdr;
-    final balanceCny = balance * ethCny;
 
     void _changeCurrency() {
       setState(() {
@@ -453,17 +446,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           selectedCurrency = 'usd';
         }
       });
-    }
-
-    String getCurrencySymbol() {
-      switch (selectedCurrency) {
-        case 'idr':
-          return 'Rp';
-        case 'cny':
-          return '¥';
-        default:
-          return '\$';
-      }
     }
 
     double getConvertedBalance() {
@@ -687,7 +669,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 onTap: _changeCurrency,
                                 child: Text(
                                   balanceVisible
-                                      ? '${getFormattedBalance()}'
+                                      ? getFormattedBalance()
                                       : '••••',
                                   style: TextStyle(
                                     color: Colors.grey[400],
@@ -836,13 +818,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           onTap: () => context.push('/history'),
                         ),
                         _ActionCard(
-                          icon: Icons.shield_outlined,
+                          icon: Icons.shield,
                           label: 'Zona Aman',
                           onTap: () async {
                             await context.push('/safe-zones');
                             await _checkSafeZone();
                           },
                         ),
+
+                        // _ActionCard(
+                        //   icon: Icons.data_object,
+                        //   label: 'Raw Data',
+                        //   onTap: () {context.push('/debug-storage');
+                        //   },
+                        // ),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -968,8 +957,6 @@ class _ActionCard extends StatelessWidget {
     );
   }
 }
-
-// Timezone Clock Widget
 
 class _ClockWidget extends ConsumerStatefulWidget {
   final Future<void> Function() onRefresh;

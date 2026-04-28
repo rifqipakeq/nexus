@@ -40,7 +40,7 @@ class AuthService {
 
   final PasswordService _passwordService;
   final BiometricAuthService _biometricService;
-  final FlutterSecureStorage _secureStorage; // session
+  final FlutterSecureStorage _secureStorage; 
   final Uuid _uuid;
 
   Box? _accountsBox;

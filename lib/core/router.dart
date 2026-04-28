@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +14,7 @@ import '../presentation/screens/send_transaction_screen.dart';
 import '../presentation/screens/history_screen.dart';
 import '../presentation/screens/account_switcher_screen.dart';
 import '../presentation/screens/safe_zone_screen.dart';
+import '../presentation/screens/debug_storage_screen.dart';
 
 /// GoRouter config
 final routerProvider = Provider<GoRouter>((ref) {
@@ -58,6 +60,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/safe-zones',
         builder: (context, state) => const SafeZoneScreen(),
       ),
+      if (kDebugMode)
+        GoRoute(
+          path: '/debug-storage',
+          builder: (context, state) => const DebugStorageScreen(),
+        ),
     ],
     errorBuilder: (context, state) => Scaffold(
       body: Center(child: Text('Halaman tidak ditemukan: ${state.uri}')),

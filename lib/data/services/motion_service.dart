@@ -8,10 +8,8 @@ class MotionService {
   StreamSubscription<AccelerometerEvent>? _accelSubscription;
   StreamSubscription<dynamic>? _proximitySubscription;
 
-  /// Shake threshold in m/s². Normal vibration is usually > 15.
   static const double _shakeThreshold = 15.0;
 
-  /// Minimum time between two shakes.
   static const Duration _shakeCooldown = Duration(milliseconds: 1000);
 
   DateTime _lastShakeTime = DateTime.now();

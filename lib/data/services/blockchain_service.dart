@@ -56,13 +56,10 @@ class BlockchainService {
     return EthPrivateKey.fromHex(privateKeyHex);
   }
 
-  // Balance management
-  /// ambil data balance eth untuk address terkait dari jaringan sepholia
   Future<double> getBalance(String address) async {
     try {
       final ethAddress = EthereumAddress.fromHex(address);
       final balance = await _client.getBalance(ethAddress);
-      // Convert Wei ke ETH
       return balance.getValueInUnit(EtherUnit.ether);
     } catch (e) {
       throw Exception('Gagal mengambil balance: $e');
