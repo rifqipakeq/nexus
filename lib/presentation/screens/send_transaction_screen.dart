@@ -378,8 +378,7 @@ class _SendTransactionScreenState extends ConsumerState<SendTransactionScreen> {
                       const SizedBox(height: 8),
                       Text(
                         '• Network: Ethereum Sepolia Testnet\n'
-                        '• Chain ID: 11155111\n'
-                        '• Ini adalah testnet, bukan uang nyata.',
+                        '• Chain ID: 11155111',
                         style:
                             TextStyle(color: Colors.grey[400], fontSize: 13),
                       ),

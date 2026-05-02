@@ -16,6 +16,9 @@ class _SafeZoneScreenState extends ConsumerState<SafeZoneScreen> {
   Future<void> _addZone() async {
     final locationService = ref.read(locationServiceProvider);
     final storage = ref.read(userScopedStorageProvider);
+    final biometric = ref.read(biometricAuthServiceProvider);
+    final passwordService = ref.read(passwordServiceProvider);
+    final currentUser = ref.read(currentUserProvider);
 
     setState(() => _isCapturing = true);
     Map<String, double> coords;
@@ -123,9 +126,7 @@ class _SafeZoneScreenState extends ConsumerState<SafeZoneScreen> {
                   inactiveTrackColor: const Color(0xFF0F3460),
                   thumbColor: const Color(0xFF6C63FF),
                   overlayColor: const Color(0x226C63FF),
-                  valueIndicatorTextStyle: const TextStyle(
-                    color: Colors.white,
-                  ),
+                  valueIndicatorTextStyle: const TextStyle(color: Colors.white),
                 ),
                 child: Slider(
                   value: selectedRadius,
@@ -166,8 +167,9 @@ class _SafeZoneScreenState extends ConsumerState<SafeZoneScreen> {
 
     if (confirmed != true || !mounted) return;
 
-    final name =
-        nameController.text.trim().isEmpty ? 'Zona Saya' : nameController.text.trim();
+    final name = nameController.text.trim().isEmpty
+        ? 'Zona Saya'
+        : nameController.text.trim();
     final newZone = {
       'name': name,
       'lat': coords['lat']!,
@@ -180,6 +182,87 @@ class _SafeZoneScreenState extends ConsumerState<SafeZoneScreen> {
     );
     currentZones.add(newZone);
 
+    // Require biometric authentication to add a safe zone. If biometric is
+    // unavailable or fails, fall back to password verification.
+    bool authenticated = false;
+    try {
+      final avail = await biometric.checkAvailability();
+      if (avail.isAvailable &&
+          currentUser != null &&
+          (currentUser!.biometricPublicKey != null)) {
+        authenticated = await biometric.simpleAuthenticate();
+      }
+    } catch (_) {
+      authenticated = false;
+    }
+
+    if (!authenticated) {
+      // Fallback to password prompt
+      if (currentUser == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Autentikasi gagal — tidak ada user aktif.'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+        return;
+      }
+
+      final passwordController = TextEditingController();
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF16213E),
+          title: const Text(
+            'Verifikasi Password',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: TextField(
+            controller: passwordController,
+            obscureText: true,
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+              hintText: 'Masukkan password Anda',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Verifikasi'),
+            ),
+          ],
+        ),
+      );
+
+      if (ok != true) return;
+
+      final password = passwordController.text;
+      final isValid = await passwordService.verifyPassword(
+        password,
+        currentUser.passwordHash,
+        currentUser.salt,
+      );
+
+      if (!isValid) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Password salah. Zona aman tidak disimpan.'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    // Persist zone after successful authentication
     await storage.saveSafeZones(currentZones);
     ref.read(userSafeZonesProvider.notifier).state = List.from(currentZones);
     // Mark that user has now configured zones (affects isInsideAnyZone logic)
@@ -316,9 +399,7 @@ class _SafeZoneScreenState extends ConsumerState<SafeZoneScreen> {
           decoration: BoxDecoration(
             color: const Color(0xFF16213E),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: const Color(0xFF6C63FF).withAlpha(60),
-            ),
+            border: Border.all(color: const Color(0xFF6C63FF).withAlpha(60)),
           ),
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(

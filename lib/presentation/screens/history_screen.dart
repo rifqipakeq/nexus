@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../core/constants.dart';
 import '../providers.dart';
 
 class HistoryScreen extends ConsumerStatefulWidget {
@@ -59,7 +62,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       ),
       body: Column(
         children: [
-          // Search Bar 
+          // Search Bar
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: TextField(
@@ -98,7 +101,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
             ),
           ),
 
-          // Results 
+          // Results
           Expanded(
             child: filtered.isEmpty
                 ? Center(
@@ -203,6 +206,16 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                             ],
                           ),
                           isThreeLine: true,
+                          onTap: tx['hash'] != null
+                              ? () => _openExplorer(tx['hash']!)
+                              : null,
+                          trailing: tx['hash'] != null
+                              ? IconButton(
+                                  icon: const Icon(Icons.open_in_new, size: 20),
+                                  onPressed: () => _openExplorer(tx['hash']!),
+                                  tooltip: 'Buka di Sepolia Etherscan',
+                                )
+                              : null,
                         ),
                       );
                     },
@@ -211,6 +224,23 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _openExplorer(String hash) async {
+    final uri = Uri.parse('${AppConstants.sepoliaExplorerBase}$hash');
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tidak dapat membuka explorer.')),
+        );
+      }
+    } catch (_) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Gagal membuka explorer.')));
+    }
   }
 
   Future<void> _clearHistory(BuildContext context) async {

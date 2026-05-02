@@ -2,7 +2,7 @@ class AppConstants {
   AppConstants._();
 
   // app constant
-  static const String appName = 'NexusNode';
+  static const String appName = 'Nexus';
   static const Duration inactivityTimeout = Duration(minutes: 10);
   static const Duration priceRefreshInterval = Duration(minutes: 5);
 
@@ -17,6 +17,14 @@ class AppConstants {
   static const String userSafeZonesKey = 'user_safe_zones';
   static const String userTimezoneKey = 'user_timezone';
   static const String userHasConfiguredZonesKey = 'user_has_configured_zones';
+  static const String keyIsPremium = 'is_premium';
+  static const String keyQuizTokens = 'quiz_tokens';
+
+  /// Minimum quiz tokens untuk akses fitur premium
+  static const int premiumTokenThreshold = 10;
+
+  /// Tokens consumed per chat message
+  static const int tokensPerAiMessage = 10;
 
   // Secure storage keys (global)
   static const String secureKeyAesKey = 'aes_encryption_key';
@@ -32,4 +40,6 @@ class AppConstants {
 
   // durasi cek balance untuk notif
   static const Duration balancePollInterval = Duration(seconds: 10);
+
+  static const String sepoliaExplorerBase = 'https://sepolia.etherscan.io/tx/';
 }

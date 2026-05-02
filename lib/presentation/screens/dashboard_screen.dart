@@ -809,8 +809,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ),
                         _ActionCard(
                           icon: Icons.videogame_asset,
-                          label: 'Reaction Game',
-                          onTap: () => context.push('/game'),
+                          label: 'Kuis Kripto',
+                          onTap: () => context.push('/quiz'),
                         ),
                         _ActionCard(
                           icon: Icons.history,

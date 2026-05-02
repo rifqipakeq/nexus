@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nexus_node_lite/data/services/quiz_service.dart';
 import '../data/models/user_account.dart';
 import '../data/services/security_service.dart';
 import '../data/services/auth_service.dart';
@@ -13,7 +14,7 @@ import '../data/services/gemini_service.dart';
 import '../data/services/price_service.dart';
 import '../data/local/user_scoped_storage.dart';
 
-// Core Service Providers 
+// Core Service Providers
 final securityServiceProvider = Provider<SecurityService>((ref) {
   return SecurityService();
 });
@@ -65,12 +66,17 @@ final userScopedStorageProvider = Provider<UserScopedStorage>((ref) {
   return UserScopedStorage();
 });
 
-// Auth State 
+final quizServiceProvider = Provider<QuizService>((ref) {
+  return QuizService(ref.read(userScopedStorageProvider));
+});
+
+// Auth State
 /// user yang sedang aktif (null jika tidak ada sesi aktif)
 final currentUserProvider = StateProvider<UserAccount?>((ref) => null);
 final isAuthenticatedProvider = Provider<bool>((ref) {
   return ref.watch(currentUserProvider) != null;
 });
+
 /// get list akun
 final allAccountsProvider = Provider<List<UserAccount>>((ref) {
   final auth = ref.read(authServiceProvider);
@@ -95,7 +101,7 @@ final ethPriceProvider = StateProvider<Map<String, double>>((ref) {
 
 final isInSafeZoneProvider = StateProvider<bool>((ref) => false);
 
-// Chat State 
+// Chat State
 
 final chatHistoryProvider = StateProvider<List<Map<String, String>>>((ref) {
   return [];
@@ -112,15 +118,16 @@ final highScoreProvider = StateProvider<int>((ref) => 0);
 final totalGamesProvider = StateProvider<int>((ref) => 0);
 
 // Transaction History State
-final transactionHistoryProvider =
-    StateProvider<List<Map<String, String>>>((ref) => []);
+final transactionHistoryProvider = StateProvider<List<Map<String, String>>>(
+  (ref) => [],
+);
 
 /// safe zone list
-final userSafeZonesProvider =
-    StateProvider<List<Map<String, dynamic>>>((ref) => []);
+final userSafeZonesProvider = StateProvider<List<Map<String, dynamic>>>(
+  (ref) => [],
+);
 
 final userHasConfiguredZonesProvider = StateProvider<bool>((ref) => false);
 
 /// timezone list
-final selectedTimezoneProvider =
-    StateProvider<String>((ref) => 'Asia/Jakarta');
+final selectedTimezoneProvider = StateProvider<String>((ref) => 'Asia/Jakarta');

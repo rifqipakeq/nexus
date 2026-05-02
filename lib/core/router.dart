@@ -8,7 +8,7 @@ import '../presentation/screens/register_screen.dart';
 import '../presentation/screens/biometric_screen.dart';
 import '../presentation/screens/dashboard_screen.dart';
 import '../presentation/screens/chat_screen.dart';
-import '../presentation/screens/game_screen.dart';
+import '../presentation/screens/quiz_screen.dart';
 import '../presentation/screens/scanner_screen.dart';
 import '../presentation/screens/send_transaction_screen.dart';
 import '../presentation/screens/history_screen.dart';
@@ -35,7 +35,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const DashboardScreen(),
       ),
       GoRoute(path: '/chat', builder: (context, state) => const ChatScreen()),
-      GoRoute(path: '/game', builder: (context, state) => const GameScreen()),
+      GoRoute(path: '/quiz', builder: (context, state) => const QuizScreen()),
       GoRoute(
         path: '/scanner',
         builder: (context, state) => const ScannerScreen(),

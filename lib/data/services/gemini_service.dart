@@ -48,7 +48,7 @@ class GeminiService {
       final balanceIdr = balance * ethIdr;
 
       final systemPrompt = '''
-Kamu adalah NexusBot, asisten AI personal untuk aplikasi NexusNode Lite — aplikasi portofolio Web3 testnet Ethereum (Sepolia).
+Kamu adalah NexusBot, asisten AI personal untuk aplikasi Nexus — aplikasi portofolio Web3 testnet Ethereum (Sepolia).
 Kamu memiliki akses ke data real-time pengguna berikut dan gunakan data ini untuk menjawab pertanyaan dengan tepat dan personal.
 
 === DATA PENGGUNA ===
