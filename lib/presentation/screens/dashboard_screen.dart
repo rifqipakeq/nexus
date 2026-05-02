@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -35,10 +34,44 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     tz.initializeTimeZones();
     _loadUserPreferences();
     _loadData();
+    _loadPremiumState();
     _startMotionDetection();
     _startProximityDetection();
     _startBalancePolling();
     _startPricePolling();
+  }
+
+  Future<void> _loadPremiumState() async {
+    final storage = ref.read(userScopedStorageProvider);
+    // Load premium & quiz tokens from Hive
+    ref.read(isPremiumProvider.notifier).state = storage.isPremium;
+    ref.read(quizTokensProvider.notifier).state = storage.getQuizTokens();
+    // Load ERC-20 tokens
+    await _loadErc20Tokens(); // einstein
+  }
+
+// einstein
+  Future<void> _loadErc20Tokens() async {
+    final address = ref.read(walletAddressProvider);
+    if (address == null) return;
+    ref.read(tokenListLoadingProvider.notifier).state = true;
+    try {
+      final tokenService = ref.read(tokenServiceProvider);
+      // Load cached first for instant display
+      final cached = tokenService.loadCached();
+      if (cached.isNotEmpty) {
+        ref.read(tokenListProvider.notifier).state = cached;
+      }
+      // Fetch fresh balances
+      final fresh = await tokenService.fetchBalances(address);
+      if (mounted) {
+        ref.read(tokenListProvider.notifier).state = fresh;
+      }
+    } catch (_) {} finally {
+      if (mounted) {
+        ref.read(tokenListLoadingProvider.notifier).state = false;
+      }
+    }
   }
 
   Future<void> _loadUserPreferences() async {
@@ -404,9 +437,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     ref.invalidate(totalGamesProvider);
     ref.invalidate(isInSafeZoneProvider);
     ref.invalidate(transactionHistoryProvider);
+    ref.invalidate(txHistoryProvider);
     ref.invalidate(userSafeZonesProvider);
     ref.invalidate(userHasConfiguredZonesProvider);
     ref.invalidate(selectedTimezoneProvider);
+    ref.invalidate(tokenListProvider); // einstein
+    ref.invalidate(isPremiumProvider);
+    ref.invalidate(quizTokensProvider);
 
     if (mounted) context.go('/login');
   }
@@ -557,8 +594,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
-                                      if (currentUser.biometricPublicKey !=
-                                          null)
+                                      if (currentUser.biometricPublicKey != null)
                                         const Padding(
                                           padding: EdgeInsets.only(left: 4),
                                           child: Icon(
@@ -569,12 +605,50 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                         ),
                                     ],
                                   ),
-                                  Text(
-                                    'Ketuk avatar untuk mengubah foto',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey[600],
-                                    ),
+                                  const SizedBox(height: 4),
+                                  // Quiz token chip + premium badge
+                                  Consumer(
+                                    builder: (_, ref, __) {
+                                      final tokens = ref.watch(quizTokensProvider);
+                                      final isPremium = ref.watch(isPremiumProvider);
+                                      return Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF6C63FF).withValues(alpha: 0.15),
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: Border.all(color: const Color(0xFF6C63FF).withValues(alpha: 0.4)),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(Icons.token, size: 11, color: Color(0xFF6C63FF)),
+                                                const SizedBox(width: 3),
+                                                Text(
+                                                  '$tokens tokens',
+                                                  style: const TextStyle(color: Color(0xFF6C63FF), fontSize: 10, fontWeight: FontWeight.w600),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          if (isPremium) ...[
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                gradient: const LinearGradient(colors: [Color(0xFFFFD700), Color(0xFFFFA000)]),
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: const Text(
+                                                'PREMIUM',
+                                                style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      );
+                                    },
                                   ),
                                 ],
                               ),
@@ -782,6 +856,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                     const SizedBox(height: 16),
 
+                    // ERC-20 Token List (Einstein)
+                    if (address != null)
+                      _TokenListCard(
+                        onRefresh: _loadErc20Tokens,
+                      ),
+
+                    const SizedBox(height: 16),
+
                     // Quick Actions
                     GridView.count(
                       crossAxisCount: 2,
@@ -797,10 +879,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           enabled: isInSafeZone && address != null,
                           onTap: () async {
                             await context.push('/send');
-                            // Immediately refresh balance when returning from send
-                            // screen — no need to wait for the next poll cycle.
                             await _refreshBalance();
                           },
+                        ),
+                        // einstein
+                        _ActionCard(
+                          icon: Icons.swap_horiz,
+                          label: 'Swap Tokens',
+                          onTap: () => context.push('/swap'),
                         ),
                         _ActionCard(
                           icon: Icons.smart_toy,
@@ -808,9 +894,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           onTap: () => context.push('/chat'),
                         ),
                         _ActionCard(
-                          icon: Icons.videogame_asset,
-                          label: 'Reaction Game',
-                          onTap: () => context.push('/game'),
+                          icon: Icons.quiz,
+                          label: 'Crypto Quiz',
+                          onTap: () async {
+                            await context.push('/game');
+                            _loadPremiumState();
+                          },
                         ),
                         _ActionCard(
                           icon: Icons.history,
@@ -825,13 +914,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             await _checkSafeZone();
                           },
                         ),
-
-                        // _ActionCard(
-                        //   icon: Icons.data_object,
-                        //   label: 'Raw Data',
-                        //   onTap: () {context.push('/debug-storage');
-                        //   },
-                        // ),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -909,7 +991,205 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 }
 
+// einstein
+/// ERC-20 token list card for the dashboard.
+class _TokenListCard extends ConsumerWidget {
+  final Future<void> Function() onRefresh;
+  const _TokenListCard({required this.onRefresh});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(tokenListProvider);
+    final isLoading = ref.watch(tokenListLoadingProvider);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Tokens',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isLoading)
+                      const SizedBox(
+                        height: 14,
+                        width: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Color(0xFF6C63FF),
+                        ),
+                      )
+                    else
+                      IconButton(
+                        icon: const Icon(Icons.refresh, size: 18),
+                        onPressed: onRefresh,
+                        tooltip: 'Refresh token balances',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'Sepolia',
+                        style: TextStyle(
+                          color: Colors.orange,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            // ETH row (always shown)
+            Consumer(
+              builder: (_, ref, __) {
+                final balance = ref.watch(walletBalanceProvider);
+                return _TokenRow(
+                  symbol: 'ETH',
+                  name: 'Ethereum',
+                  balance: balance.toStringAsFixed(6),
+                  color: const Color(0xFF627EEA),
+                );
+              },
+            ),
+            const Divider(color: Colors.white12, height: 16),
+            // ERC-20 rows
+            if (tokens.isEmpty && !isLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  'No token balances found on Sepolia.',
+                  style: TextStyle(color: Colors.white38, fontSize: 13),
+                ),
+              )
+            else
+              ...tokens.asMap().entries.map((entry) {
+                final token = entry.value;
+                final isLast = entry.key == tokens.length - 1;
+                return Column(
+                  children: [
+                    _TokenRow(
+                      symbol: token.symbol,
+                      name: token.name,
+                      balance: token.balanceFormatted,
+                      color: _tokenColor(token.symbol),
+                    ),
+                    if (!isLast)
+                      const Divider(color: Colors.white12, height: 16),
+                  ],
+                );
+              }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _tokenColor(String symbol) {
+    switch (symbol) {
+      case 'LINK':
+        return const Color(0xFF2A5ADA);
+      case 'UNI':
+        return const Color(0xFFFF007A);
+      case 'USDC':
+        return const Color(0xFF2775CA);
+      default:
+        return const Color(0xFF6C63FF);
+    }
+  }
+}
+
+class _TokenRow extends StatelessWidget {
+  final String symbol;
+  final String name;
+  final String balance;
+  final Color color;
+
+  const _TokenRow({
+    required this.symbol,
+    required this.name,
+    required this.balance,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(
+              symbol[0],
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                symbol,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+              Text(
+                name,
+                style:
+                    const TextStyle(color: Colors.white38, fontSize: 11),
+              ),
+            ],
+          ),
+        ),
+        Text(
+          balance,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _ActionCard extends StatelessWidget {
+
   final IconData icon;
   final String label;
   final VoidCallback? onTap;

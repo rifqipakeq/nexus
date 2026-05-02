@@ -8,13 +8,16 @@ import '../presentation/screens/register_screen.dart';
 import '../presentation/screens/biometric_screen.dart';
 import '../presentation/screens/dashboard_screen.dart';
 import '../presentation/screens/chat_screen.dart';
-import '../presentation/screens/game_screen.dart';
+import '../presentation/screens/quiz_screen.dart';
 import '../presentation/screens/scanner_screen.dart';
 import '../presentation/screens/send_transaction_screen.dart';
 import '../presentation/screens/history_screen.dart';
 import '../presentation/screens/account_switcher_screen.dart';
 import '../presentation/screens/safe_zone_screen.dart';
 import '../presentation/screens/debug_storage_screen.dart';
+import '../presentation/screens/transaction_detail_screen.dart';
+import '../presentation/screens/swap_screen.dart';
+import '../data/models/tx_record.dart';
 
 /// GoRouter config
 final routerProvider = Provider<GoRouter>((ref) {
@@ -35,7 +38,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const DashboardScreen(),
       ),
       GoRoute(path: '/chat', builder: (context, state) => const ChatScreen()),
-      GoRoute(path: '/game', builder: (context, state) => const GameScreen()),
+      GoRoute(path: '/game', builder: (context, state) => const QuizScreen()),
       GoRoute(
         path: '/scanner',
         builder: (context, state) => const ScannerScreen(),
@@ -60,6 +63,15 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/safe-zones',
         builder: (context, state) => const SafeZoneScreen(),
       ),
+      GoRoute(
+        path: '/tx-detail',
+        builder: (context, state) {
+          final tx = state.extra as TxRecord;
+          return TransactionDetailScreen(tx: tx);
+        },
+      ),
+      // Einstein: Token Swap
+      GoRoute(path: '/swap', builder: (context, state) => const SwapScreen()),
       if (kDebugMode)
         GoRoute(
           path: '/debug-storage',

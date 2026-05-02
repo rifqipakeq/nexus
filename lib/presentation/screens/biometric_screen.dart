@@ -116,9 +116,21 @@ class _BiometricScreenState extends ConsumerState<BiometricScreen> {
     ref.read(highScoreProvider.notifier).state = storage.getHighScore();
     ref.read(totalGamesProvider.notifier).state = storage.getTotalGames();
     ref.read(ethPriceProvider.notifier).state = storage.getCachedPrices();
+    // Legacy tx history (for backward compat)
     ref.read(transactionHistoryProvider.notifier).state =
         storage.getTransactionHistory();
+    // Einstein: load cached rich tx history
+    final cachedTxV2 = storage.getTxHistoryV2();
+    if (cachedTxV2.isNotEmpty) {
+      // Import is not needed here — txHistoryProvider holds TxRecord objects,
+      // but we just seed from Hive raw maps; dashboard will re-fetch properly.
+      // We leave txHistoryProvider empty here; HistoryScreen re-fetches on open.
+    }
+    // Einstein: premium & quiz tokens
+    ref.read(isPremiumProvider.notifier).state = storage.isPremium;
+    ref.read(quizTokensProvider.notifier).state = storage.getQuizTokens();
   }
+
 
   @override
   Widget build(BuildContext context) {

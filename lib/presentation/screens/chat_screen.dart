@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/constants.dart';
 import '../providers.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
@@ -20,24 +21,41 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     super.dispose();
   }
 
-  /// Kumpulkan context dari providers dan kirim ke Gemini
   Future<void> _sendMessage() async {
+    final isPremium = ref.read(isPremiumProvider);
+    if (!isPremium) return; 
+
     final text = _controller.text.trim();
     if (text.isEmpty) return;
 
     _controller.clear();
 
-    // Simpan pesan user
+    // Deduct token
+    final quizService = ref.read(quizServiceProvider);
+    final hasTokens = await quizService.spendToken();
+    if (!hasTokens) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Token anda habis. Main quiz untuk dapat token lagi!'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+
     final storage = ref.read(userScopedStorageProvider);
+    ref.read(quizTokensProvider.notifier).state = storage.getQuizTokens();
+    ref.read(isPremiumProvider.notifier).state = storage.isPremium;
+
     final userMsg = {'role': 'user', 'text': text};
     await storage.addChatMessage(userMsg);
-
     ref.read(chatHistoryProvider.notifier).state = storage.getChatHistory();
     ref.read(chatLoadingProvider.notifier).state = true;
-
     _scrollToBottom();
 
-    // Kumpulkan context dari providers
+    // Gather context
     final currentUser = ref.read(currentUserProvider);
     final balance = ref.read(walletBalanceProvider);
     final address = ref.read(walletAddressProvider);
@@ -45,8 +63,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final isInSafeZone = ref.read(isInSafeZoneProvider);
     final safeZones = ref.read(userSafeZonesProvider);
     final timezone = ref.read(selectedTimezoneProvider);
+    final quizTokens = ref.read(quizTokensProvider);
 
-    final context = {
+    final ctx = {
       'username': currentUser?.username ?? 'User',
       'walletAddress': address,
       'balance': balance,
@@ -55,18 +74,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       'isInSafeZone': isInSafeZone,
       'safeZoneCount': safeZones.length,
       'timezone': timezone,
+      'quizTokens': quizTokens,
+      'isPremium': true,
     };
 
-    // Kirim ke Gemini dengan context
     final gemini = ref.read(geminiServiceProvider);
-    final response = await gemini.sendContextualMessage(text, context);
+    final response = await gemini.sendContextualMessage(text, ctx);
 
     final aiMsg = {'role': 'assistant', 'text': response};
     await storage.addChatMessage(aiMsg);
-
     ref.read(chatHistoryProvider.notifier).state = storage.getChatHistory();
     ref.read(chatLoadingProvider.notifier).state = false;
-
     _scrollToBottom();
   }
 
@@ -90,6 +108,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isPremium = ref.watch(isPremiumProvider);
+    final quizTokens = ref.watch(quizTokensProvider);
+
+    if (!isPremium) {
+      return _PremiumLockScreen(
+        currentTokens: quizTokens,
+        threshold: AppConstants.premiumTokenThreshold,
+      );
+    }
+
     final chatHistory = ref.watch(chatHistoryProvider);
     final isLoading = ref.watch(chatLoadingProvider);
     final currentUser = ref.watch(currentUserProvider);
@@ -97,13 +125,74 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final isInSafeZone = ref.watch(isInSafeZoneProvider);
 
     return Scaffold(
+      backgroundColor: const Color(0xFF0A0E1A),
       appBar: AppBar(
-        title: const Text('NexusBot'),
+        backgroundColor: const Color(0xFF0A0E1A),
+        elevation: 0,
+        title: Row(
+          children: [
+            const Text(
+              'NexusBot',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(width: 8),
+            // Premium badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFFD700), Color(0xFFFFA000)],
+                ),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Text(
+                'PREMIUM',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+          ],
+        ),
         actions: [
+          // Token counter
+          Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6C63FF).withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFF6C63FF).withValues(alpha: 0.5),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.token, size: 13, color: Color(0xFF6C63FF)),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$quizTokens',
+                      style: const TextStyle(
+                        color: Color(0xFF6C63FF),
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
           IconButton(
-            icon: const Icon(Icons.delete_outline),
+            icon: const Icon(Icons.delete_outline, color: Colors.white70),
             onPressed: _clearHistory,
-            tooltip: 'Bersihkan Riwayat',
+            tooltip: 'Bersihkan Riwayat Chat',
           ),
         ],
       ),
@@ -115,7 +204,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             isInSafeZone: isInSafeZone,
           ),
 
-          // Messages List
+          // Messages
           Expanded(
             child: chatHistory.isEmpty
                 ? Center(
@@ -146,11 +235,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         const SizedBox(height: 8),
                         Text(
                           'Ada yang bisa saya bantu?',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.grey[500],
-                            fontSize: 13,
-                          ),
+                          style: TextStyle(color: Colors.grey[500], fontSize: 13),
                         ),
                         const SizedBox(height: 16),
                         Wrap(
@@ -191,16 +276,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     itemCount: chatHistory.length,
                     itemBuilder: (context, index) {
                       final msg = chatHistory[index];
-                      final isUser = msg['role'] == 'user';
                       return _ChatBubble(
                         text: msg['text'] ?? '',
-                        isUser: isUser,
+                        isUser: msg['role'] == 'user',
                       );
                     },
                   ),
           ),
 
-          // Loading Indicator
+          // Loading
           if (isLoading)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -209,7 +293,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   SizedBox(
                     height: 16,
                     width: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF6C63FF),
+                    ),
                   ),
                   SizedBox(width: 8),
                   Text(
@@ -224,16 +311,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              border: Border(top: BorderSide(color: Colors.grey[800]!)),
+              color: const Color(0xFF16213E),
+              border: Border(top: BorderSide(color: Colors.white12)),
             ),
             child: Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: _controller,
+                    style: const TextStyle(color: Colors.white),
                     decoration: const InputDecoration(
                       hintText: 'Tanyakan sesuatu...',
+                      hintStyle: TextStyle(color: Colors.white38),
                       border: InputBorder.none,
                     ),
                     textInputAction: TextInputAction.send,
@@ -254,7 +343,178 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 }
 
-// Context Badge 
+
+class _PremiumLockScreen extends StatelessWidget {
+  final int currentTokens;
+  final int threshold;
+
+  const _PremiumLockScreen({
+    required this.currentTokens,
+    required this.threshold,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = (currentTokens / threshold).clamp(0.0, 1.0);
+    final remaining = (threshold - currentTokens).clamp(0, threshold);
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF0A0E1A),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF0A0E1A),
+        elevation: 0,
+        title: const Text(
+          'NexusBot',
+          style: TextStyle(color: Colors.white54, fontWeight: FontWeight.w600),
+        ),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Lock icon
+              Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFF6C63FF).withValues(alpha: 0.3),
+                      const Color(0xFF6C63FF).withValues(alpha: 0.1),
+                    ],
+                  ),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: const Color(0xFF6C63FF).withValues(alpha: 0.5),
+                    width: 2,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.lock_outline,
+                  size: 48,
+                  color: Color(0xFF6C63FF),
+                ),
+              ),
+              const SizedBox(height: 28),
+              const Text(
+                'Premium Feature',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'NexusBot AI adalah fitur premium.\nDapatkan $threshold quiz tokens untuk membuka akses penuh.',
+                style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 15,
+                  height: 1.6,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+
+              // Progress
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF16213E),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.token,
+                                size: 16, color: Color(0xFF6C63FF)),
+                            const SizedBox(width: 6),
+                            const Text(
+                              'Your Tokens',
+                              style: TextStyle(
+                                  color: Colors.white54, fontSize: 13),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          '$currentTokens / $threshold',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        backgroundColor: Colors.white12,
+                        valueColor: const AlwaysStoppedAnimation(
+                          Color(0xFF6C63FF),
+                        ),
+                        minHeight: 10,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      remaining > 0
+                          ? 'Play $remaining more tokens worth of quizzes to unlock!'
+                          : 'Almost there!',
+                      style: const TextStyle(
+                          color: Colors.white38, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // CTA Button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.quiz_outlined, size: 20),
+                  label: const Text('Play Crypto Quiz to Earn Tokens'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6C63FF),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '10 tokens per correct answer · Bonus for streaks',
+                style: TextStyle(color: Colors.white24, fontSize: 11),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Existing sub-widgets (preserved) ────────────────────────────────────────
+
 class _ContextBadge extends StatelessWidget {
   final String? username;
   final double balance;
@@ -277,10 +537,8 @@ class _ContextBadge extends StatelessWidget {
         children: [
           const Icon(Icons.person, size: 12, color: Colors.white54),
           const SizedBox(width: 4),
-          Text(
-            username!,
-            style: const TextStyle(color: Colors.white70, fontSize: 11),
-          ),
+          Text(username!,
+              style: const TextStyle(color: Colors.white70, fontSize: 11)),
           const SizedBox(width: 12),
           const Icon(Icons.currency_bitcoin, size: 12, color: Colors.white54),
           const SizedBox(width: 4),
@@ -308,7 +566,6 @@ class _ContextBadge extends StatelessWidget {
   }
 }
 
-// Suggestion prompt
 class _SuggestionChip extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
@@ -322,9 +579,11 @@ class _SuggestionChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: const Color(0xFF6C63FF).withAlpha(30),
+          color: const Color(0xFF6C63FF).withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFF6C63FF).withAlpha(80)),
+          border: Border.all(
+            color: const Color(0xFF6C63FF).withValues(alpha: 0.4),
+          ),
         ),
         child: Text(
           label,
@@ -335,7 +594,6 @@ class _SuggestionChip extends StatelessWidget {
   }
 }
 
-// Chat Bubble 
 class _ChatBubble extends StatelessWidget {
   final String text;
   final bool isUser;
@@ -349,11 +607,11 @@ class _ChatBubble extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
-        ),
+        constraints:
+            BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
         decoration: BoxDecoration(
-          color: isUser ? const Color(0xFF6C63FF) : const Color(0xFF16213E),
+          color:
+              isUser ? const Color(0xFF6C63FF) : const Color(0xFF16213E),
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
@@ -361,7 +619,7 @@ class _ChatBubble extends StatelessWidget {
             bottomRight: Radius.circular(isUser ? 4 : 16),
           ),
         ),
-        child: Text(text, style: const TextStyle(fontSize: 14)),
+        child: Text(text, style: const TextStyle(fontSize: 14, color: Colors.white)),
       ),
     );
   }

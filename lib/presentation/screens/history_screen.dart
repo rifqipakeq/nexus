@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../../data/models/tx_record.dart';
 import '../providers.dart';
+import 'transaction_detail_screen.dart';
 
 class HistoryScreen extends ConsumerStatefulWidget {
   const HistoryScreen({super.key});
@@ -15,68 +17,102 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   String _query = '';
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadHistory();
+    });
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
   }
 
-  List<Map<String, String>> _filterHistory(List<Map<String, String>> history) {
+  Future<void> _loadHistory() async {
+    final address = ref.read(walletAddressProvider);
+    if (address == null) return;
+
+    ref.read(txHistoryLoadingProvider.notifier).state = true;
+    final txService = ref.read(transactionServiceProvider);
+    final txs = await txService.fetchAndCache(address);
+    ref.read(txHistoryProvider.notifier).state = txs;
+    ref.read(txHistoryLoadingProvider.notifier).state = false;
+  }
+
+  List<TxRecord> _filterHistory(List<TxRecord> history) {
     if (_query.isEmpty) return history;
     final q = _query.toLowerCase();
     return history.where((tx) {
-      final from = (tx['from'] ?? '').toLowerCase();
-      final to = (tx['to'] ?? '').toLowerCase();
-      final hash = (tx['hash'] ?? '').toLowerCase();
-      return from.contains(q) || to.contains(q) || hash.contains(q);
+      return tx.from.toLowerCase().contains(q) ||
+          tx.to.toLowerCase().contains(q) ||
+          tx.hash.toLowerCase().contains(q);
     }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
     final address = ref.watch(walletAddressProvider);
-    final history = ref.watch(transactionHistoryProvider);
+    final history = ref.watch(txHistoryProvider);
+    final isLoading = ref.watch(txHistoryLoadingProvider);
 
     if (address == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Riwayat Transaksi')),
-        body: const Center(child: Text('Tidak ada wallet terdaftar.')),
+        backgroundColor: const Color(0xFF0A0E1A),
+        appBar: _buildAppBar(history, isLoading),
+        body: const Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.account_balance_wallet_outlined,
+                  size: 64, color: Colors.white24),
+              SizedBox(height: 16),
+              Text('Tidak ada wallet yang terhubung.',
+                  style: TextStyle(color: Colors.white54)),
+            ],
+          ),
+        ),
       );
     }
 
     final filtered = _filterHistory(history);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Riwayat Transaksi'),
-        actions: [
-          if (history.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.delete_outline),
-              onPressed: () => _clearHistory(context),
-              tooltip: 'Bersihkan Riwayat',
-            ),
-        ],
-      ),
+      backgroundColor: const Color(0xFF0A0E1A),
+      appBar: _buildAppBar(history, isLoading),
       body: Column(
         children: [
-          // Search Bar 
+          // Last fetched info
+          if (!isLoading)
+            _LastFetchedBar(
+              txService: ref.read(transactionServiceProvider),
+            ),
+
+          // Search Bar
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: TextField(
               controller: _searchController,
               onChanged: (v) => setState(() => _query = v.trim()),
+              style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                hintText: 'Cari berdasarkan alamat atau hash tx...',
-                prefixIcon: const Icon(Icons.search, size: 20),
+                hintText: 'Cari berdasarkan alamat atau hash...',
+                hintStyle: const TextStyle(color: Colors.white38),
+                prefixIcon:
+                    const Icon(Icons.search, size: 20, color: Colors.white38),
                 suffixIcon: _query.isNotEmpty
                     ? IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
+                        icon: const Icon(Icons.clear,
+                            size: 18, color: Colors.white38),
                         onPressed: () {
                           _searchController.clear();
                           setState(() => _query = '');
                         },
                       )
                     : null,
+                filled: true,
+                fillColor: const Color(0xFF16213E),
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -84,21 +120,46 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                 ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey[700]!),
+                  borderSide: BorderSide.none,
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey[700]!),
+                  borderSide: const BorderSide(color: Colors.white12),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF6C63FF)),
+                  borderSide:
+                      const BorderSide(color: Color(0xFF6C63FF), width: 1.5),
                 ),
               ),
             ),
           ),
 
-          // Results 
+          // Loading
+          if (isLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    height: 14,
+                    width: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF6C63FF),
+                    ),
+                  ),
+                  SizedBox(width: 10),
+                  Text(
+                    'Fetching from Etherscan...',
+                    style: TextStyle(color: Colors.white38, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+
+          // Results
           Expanded(
             child: filtered.isEmpty
                 ? Center(
@@ -110,102 +171,56 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                               ? Icons.search_off
                               : Icons.receipt_long,
                           size: 64,
-                          color: Colors.grey[700],
+                          color: Colors.white12,
                         ),
                         const SizedBox(height: 16),
                         Text(
                           _query.isNotEmpty
-                              ? 'Data tidak ditemukan untuk "$_query"'
-                              : 'Tidak ada transaksi',
-                          style: TextStyle(
-                            color: Colors.grey[500],
-                            fontSize: 16,
-                          ),
+                              ? 'Tidak ada hasil untuk "$_query"'
+                              : isLoading
+                                  ? 'Memuat...'
+                                  : 'Tidak ada transaksi yang ditemukan',
+                          style: const TextStyle(
+                              color: Colors.white38, fontSize: 15),
                         ),
-                        if (_query.isEmpty) ...[
+                        if (_query.isEmpty && !isLoading) ...[
                           const SizedBox(height: 8),
-                          Text(
-                            'Kirim atau terima ETH untuk melihat riwayat Anda.',
+                          const Text(
+                            'Kirim atau terima ETH di Sepolia untuk melihat riwayat.',
                             style: TextStyle(
-                              color: Colors.grey[600],
-                              fontSize: 13,
-                            ),
+                                color: Colors.white24, fontSize: 12),
                           ),
                         ],
                       ],
                     ),
                   )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: filtered.length,
-                    itemBuilder: (context, index) {
-                      final tx = filtered[index];
-                      final isSent = tx['type'] == 'sent';
+                : RefreshIndicator(
+                    onRefresh: _loadHistory,
+                    color: const Color(0xFF6C63FF),
+                    child: ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      itemCount: filtered.length,
+                      itemBuilder: (context, index) {
+                        final tx = filtered[index];
+                        final myAddress =
+                            ref.read(walletAddressProvider) ?? '';
+                        final isSent = tx.from.toLowerCase() ==
+                            myAddress.toLowerCase();
 
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: isSent
-                                ? Colors.red.withValues(alpha: 0.2)
-                                : Colors.green.withValues(alpha: 0.2),
-                            child: Icon(
-                              isSent
-                                  ? Icons.arrow_upward
-                                  : Icons.arrow_downward,
-                              color: isSent
-                                  ? Colors.redAccent
-                                  : Colors.greenAccent,
-                            ),
-                          ),
-                          title: Text(
-                            isSent ? 'Dikirim' : 'Diterima',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                tx['value'] ?? '0 ETH',
-                                style: const TextStyle(fontSize: 16),
+                        return _TxCard(
+                          tx: tx,
+                          isSent: isSent,
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    TransactionDetailScreen(tx: tx),
                               ),
-                              if (isSent && tx['to'] != null)
-                                Text(
-                                  'To: ${_shortAddress(tx['to']!)}',
-                                  style: TextStyle(
-                                    color: Colors.grey[400],
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              if (!isSent && tx['from'] != null)
-                                Text(
-                                  'From: ${tx['from'] == 'External' ? 'External' : _shortAddress(tx['from']!)}',
-                                  style: TextStyle(
-                                    color: Colors.grey[400],
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              Text(
-                                '${_formatDate(tx['date'])} • ${tx['status'] ?? 'unknown'}',
-                                style: TextStyle(
-                                  color: Colors.grey[500],
-                                  fontSize: 12,
-                                ),
-                              ),
-                              if (tx['hash'] != null)
-                                Text(
-                                  'TX: ${_shortHash(tx['hash']!)}',
-                                  style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 11,
-                                  ),
-                                ),
-                            ],
-                          ),
-                          isThreeLine: true,
-                        ),
-                      );
-                    },
+                            );
+                          },
+                        );
+                      },
+                    ),
                   ),
           ),
         ],
@@ -213,56 +228,227 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     );
   }
 
+  AppBar _buildAppBar(List<TxRecord> history, bool isLoading) {
+    return AppBar(
+      backgroundColor: const Color(0xFF0A0E1A),
+      elevation: 0,
+      title: const Text(
+        'Transaction History',
+        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+      ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.refresh, color: Colors.white70),
+          onPressed: isLoading ? null : _loadHistory,
+          tooltip: 'Refresh',
+        ),
+        if (history.isNotEmpty)
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: Colors.white70),
+            onPressed: () => _clearHistory(context),
+            tooltip: 'Clear Cache',
+          ),
+      ],
+    );
+  }
+
   Future<void> _clearHistory(BuildContext context) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Bersihkan Riwayat?'),
-        content: const Text('Ini akan menghapus semua catatan transaksi.'),
+        backgroundColor: const Color(0xFF16213E),
+        title: const Text('Clear History?',
+            style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'This clears the local cache. Data will re-fetch from Etherscan on next refresh.',
+          style: TextStyle(color: Colors.white70),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
+            child:
+                const Text('Cancel', style: TextStyle(color: Colors.white54)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'Bersihkan',
-              style: TextStyle(color: Colors.redAccent),
-            ),
+            child: const Text('Clear',
+                style: TextStyle(color: Colors.redAccent)),
           ),
         ],
       ),
     );
 
     if (confirm == true) {
-      final storage = ref.read(userScopedStorageProvider);
-      await storage.clearTransactionHistory();
-      ref.read(transactionHistoryProvider.notifier).state = [];
+      final txService = ref.read(transactionServiceProvider);
+      await txService.clearCache();
+      ref.read(txHistoryProvider.notifier).state = [];
     }
   }
+}
 
-  String _shortAddress(String addr) {
+// ─── Sub-widgets ──────────────────────────────────────────────────────────────
+
+class _LastFetchedBar extends StatelessWidget {
+  final dynamic txService;
+
+  const _LastFetchedBar({required this.txService});
+
+  @override
+  Widget build(BuildContext context) {
+    final lastFetched = txService.lastFetchedAt as String?;
+    if (lastFetched == null) return const SizedBox.shrink();
+
+    String timeStr = '';
+    try {
+      final dt = DateTime.parse(lastFetched);
+      timeStr = DateFormat('HH:mm · MMM d').format(dt);
+    } catch (_) {
+      timeStr = lastFetched;
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      color: const Color(0xFF0D1B2A),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_done, size: 12, color: Colors.white24),
+          const SizedBox(width: 6),
+          Text(
+            'Last synced: $timeStr via Etherscan',
+            style: const TextStyle(color: Colors.white24, fontSize: 11),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TxCard extends StatelessWidget {
+  final TxRecord tx;
+  final bool isSent;
+  final VoidCallback onTap;
+
+  const _TxCard({
+    required this.tx,
+    required this.isSent,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final directionColor = isSent ? Colors.redAccent : const Color(0xFF4CAF50);
+    final directionIcon = isSent ? Icons.arrow_upward : Icons.arrow_downward;
+    final directionLabel = isSent ? 'Sent' : 'Received';
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF16213E),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: Row(
+          children: [
+            // Direction Icon
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: directionColor.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(directionIcon, color: directionColor, size: 20),
+            ),
+            const SizedBox(width: 14),
+
+            // Info
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        directionLabel,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      if (!tx.isSuccess)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'FAILED',
+                            style: TextStyle(
+                              color: Colors.redAccent,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    isSent
+                        ? 'To: ${_short(tx.to)}'
+                        : 'From: ${_short(tx.from)}',
+                    style: const TextStyle(
+                        color: Colors.white38, fontSize: 12),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    DateFormat('MMM d, yyyy · HH:mm').format(tx.dateTime),
+                    style: const TextStyle(
+                        color: Colors.white24, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+
+            // Amount
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '${isSent ? '-' : '+'}${tx.valueEth.toStringAsFixed(5)}',
+                  style: TextStyle(
+                    color: directionColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                const Text(
+                  'ETH',
+                  style: TextStyle(color: Colors.white38, fontSize: 11),
+                ),
+                const SizedBox(height: 4),
+                const Icon(Icons.chevron_right,
+                    color: Colors.white24, size: 18),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _short(String addr) {
     if (addr.length > 10) {
       return '${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}';
     }
     return addr;
-  }
-
-  String _shortHash(String hash) {
-    if (hash.length > 16) {
-      return '${hash.substring(0, 10)}...${hash.substring(hash.length - 4)}';
-    }
-    return hash;
-  }
-
-  String _formatDate(String? isoDate) {
-    if (isoDate == null) return '';
-    try {
-      final dt = DateTime.parse(isoDate);
-      return DateFormat('MMM d, yyyy  HH:mm').format(dt);
-    } catch (_) {
-      return isoDate;
-    }
   }
 }

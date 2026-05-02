@@ -1,6 +1,6 @@
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-/// akses ke env vairable
+/// akses ke env variable
 class EnvConfig {
   EnvConfig._();
 
@@ -21,4 +21,7 @@ class EnvConfig {
 
   static double get safeZoneRadius =>
       double.tryParse(dotenv.env['SAFE_ZONE_RADIUS'] ?? '') ?? 500.0;
+
+  static String get etherscanApiKey =>
+      dotenv.env['ETHERSCAN_API_KEY'] ?? '';
 }

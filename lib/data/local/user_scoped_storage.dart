@@ -6,24 +6,26 @@ class UserScopedStorage {
   Box? _walletBox;
   Box? _chatBox;
   Box? _gameBox;
+  Box? _tokensBox; 
   Box? _pricesBox;
   String? _currentUserId;
 
   bool get isInitialized => _currentUserId != null;
   String? get currentUserId => _currentUserId;
+  bool get isTokensBoxOpen => _tokensBox != null && _tokensBox!.isOpen;
 
   Future<void> initGlobal() async {
     _pricesBox = await Hive.openBox('prices');
   }
 
   Future<void> openForUser(String userId) async {
-    // Close  data user sebelumnya
     await closeUserBoxes();
 
     _currentUserId = userId;
     _walletBox = await Hive.openBox('user_${userId}_wallet');
     _chatBox = await Hive.openBox('user_${userId}_chat');
     _gameBox = await Hive.openBox('user_${userId}_game');
+    _tokensBox = await Hive.openBox(AppConstants.userTokensBox(userId));
 
     debugPrint('Box untuk user: $userId');
   }
@@ -32,10 +34,12 @@ class UserScopedStorage {
     await _safeClose(_walletBox);
     await _safeClose(_chatBox);
     await _safeClose(_gameBox);
+    await _safeClose(_tokensBox);
 
     _walletBox = null;
     _chatBox = null;
     _gameBox = null;
+    _tokensBox = null;
     _currentUserId = null;
 
     debugPrint('Tutup semua box user, siap untuk login user lain');
@@ -69,6 +73,14 @@ class UserScopedStorage {
     return _gameBox!;
   }
 
+  Box get tokensBox {
+    _ensureUserOpen();
+    if (_tokensBox == null || !_tokensBox!.isOpen) {
+      throw StateError('Tokens box belum diinisialisasi!');
+    }
+    return _tokensBox!;
+  }
+
   Box get pricesBox {
     if (_pricesBox == null || !_pricesBox!.isOpen) {
       throw StateError(
@@ -83,6 +95,7 @@ class UserScopedStorage {
       throw StateError('Data user belum diinisialisasi!');
     }
   }
+
 
   Future<void> cachePrices(Map<String, double> prices) async {
     await pricesBox.put('eth_usd', prices['usd']);
@@ -100,6 +113,7 @@ class UserScopedStorage {
   }
 
   String? getPricesLastUpdated() => pricesBox.get('last_updated');
+
 
   Future<void> saveWalletAddress(String address) async {
     await walletBox.put('address', address);
@@ -129,6 +143,53 @@ class UserScopedStorage {
   Future<void> saveLastNotifiedTxHash(String hash) async {
     await walletBox.put('last_notified_tx_hash', hash);
   }
+
+
+  Future<void> saveTxHistoryV2(List<Map<String, dynamic>> txs) async {
+    await walletBox.put(AppConstants.keyTxHistoryV2, txs);
+    await walletBox.put(
+      AppConstants.keyTxLastFetched,
+      DateTime.now().toIso8601String(),
+    );
+  }
+
+  List<Map<String, dynamic>> getTxHistoryV2() {
+    final raw = walletBox.get(
+      AppConstants.keyTxHistoryV2,
+      defaultValue: <dynamic>[],
+    );
+    return (raw as List)
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
+  Future<void> clearTxHistoryV2() async {
+    await walletBox.put(AppConstants.keyTxHistoryV2, <dynamic>[]);
+    await walletBox.delete(AppConstants.keyTxLastFetched);
+  }
+
+  String? getTxLastFetched() =>
+      walletBox.get(AppConstants.keyTxLastFetched) as String?;
+
+  // ─── Legacy transaction history (kept for backward compat) ────────────────
+
+  Future<void> addTransaction(Map<String, String> tx) async {
+    final history = getTransactionHistory();
+    history.insert(0, tx);
+    await walletBox.put('tx_history', history);
+  }
+
+  List<Map<String, String>> getTransactionHistory() {
+    final raw = walletBox.get('tx_history', defaultValue: <dynamic>[]);
+    return (raw as List)
+        .map((e) => Map<String, String>.from(e as Map))
+        .toList();
+  }
+
+  Future<void> clearTransactionHistory() async {
+    await walletBox.put('tx_history', <dynamic>[]);
+  }
+
 
   Future<void> addChatMessage(Map<String, String> message) async {
     final history = getChatHistory();
@@ -168,22 +229,22 @@ class UserScopedStorage {
 
   int getTotalGames() => gameBox.get('total_games', defaultValue: 0) as int;
 
-  Future<void> addTransaction(Map<String, String> tx) async {
-    final history = getTransactionHistory();
-    history.insert(0, tx);
-    await walletBox.put('tx_history', history);
+
+  bool get isPremium =>
+      walletBox.get(AppConstants.keyIsPremium, defaultValue: false) as bool;
+
+  Future<void> savePremiumStatus(bool status) async {
+    await walletBox.put(AppConstants.keyIsPremium, status);
   }
 
-  List<Map<String, String>> getTransactionHistory() {
-    final raw = walletBox.get('tx_history', defaultValue: <dynamic>[]);
-    return (raw as List)
-        .map((e) => Map<String, String>.from(e as Map))
-        .toList();
+  int getQuizTokens() =>
+      (walletBox.get(AppConstants.keyQuizTokens, defaultValue: 0) as num)
+          .toInt();
+
+  Future<void> saveQuizTokens(int tokens) async {
+    await walletBox.put(AppConstants.keyQuizTokens, tokens);
   }
 
-  Future<void> clearTransactionHistory() async {
-    await walletBox.put('tx_history', <dynamic>[]);
-  }
 
   Future<void> saveSafeZones(List<Map<String, dynamic>> zones) async {
     await walletBox.put(AppConstants.userSafeZonesKey, zones);
@@ -212,6 +273,7 @@ class UserScopedStorage {
           defaultValue: false,
         ) as bool;
   }
+
 
   Future<void> saveSelectedTimezone(String tzName) async {
     await walletBox.put(AppConstants.userTimezoneKey, tzName);
