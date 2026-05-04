@@ -20,7 +20,6 @@ class _QuizScreenState extends ConsumerState<QuizScreen>
   int _streak = 0;
   int _maxStreak = 0;
   bool _quizComplete = false;
-  // quiz now purely shows questions and results; no tokens/premium
 
   late AnimationController _progressController;
   late AnimationController _feedbackController;
